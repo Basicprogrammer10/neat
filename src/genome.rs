@@ -1,4 +1,13 @@
-use std::{collections::HashMap, hash::Hash};
+use std::hash::Hash;
+use std::sync::Arc;
+use std::{collections::HashMap, fmt::Debug};
+
+use rand::{seq::IteratorRandom, thread_rng, Rng};
+
+use crate::{
+    misc::{sigmoid, SignString},
+    trainer::Trainer,
+};
 
 pub struct Genome<S: Clone + Eq + Hash, O: Clone> {
     pub nodes: Vec<NodeType<S, O>>,
@@ -14,7 +23,7 @@ pub struct Gene {
     pub innovation: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NodeType<S: Clone + Eq + Hash, O: Clone> {
     Sensor(S),
     Output(O),
@@ -33,7 +42,63 @@ struct TestNode<S: Clone + Eq + Hash, O: Clone> {
     value: f32,
 }
 
-impl<S: Clone + Eq + Hash, O: Clone + Eq + Hash> Genome<S, O> {
+impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
+    pub fn new(trainer: Arc<Trainer<S, O>>, io: Vec<NodeType<S, O>>) -> Self {
+        let mut genes = Vec::new();
+        for (i, e) in io.iter().enumerate() {
+            match e {
+                NodeType::Sensor(_) => {
+                    if thread_rng().gen_bool(trainer.config.init_edge_chance.into()) {
+                        // Get a random output node
+                        let rand_out = io
+                            .iter()
+                            .enumerate()
+                            .filter(|x| matches!(x.1, NodeType::Output(_)))
+                            .choose(&mut thread_rng())
+                            .expect("No Output Nodes");
+
+                        // Make new geane
+                        genes.push(Gene::random(trainer.new_innovation(), i, rand_out.0));
+                    }
+                }
+                _ => continue,
+            }
+        }
+        Self { nodes: io, genes }
+    }
+
+    pub fn debug(&self) -> String {
+        let mut out = Vec::new();
+        let mut remaining_nodes = self.nodes.clone();
+
+        for i in self.genes.iter() {
+            let node_in = &self.nodes[i.node_in];
+            let node_out = &self.nodes[i.node_out];
+
+            out.push(format!(
+                r#"{}("{:?}") --{}--> {}["{:?}"]"#,
+                i.node_in,
+                node_in,
+                i.weight.sign_str(),
+                i.node_out,
+                node_out
+            ));
+
+            remaining_nodes.retain(|x| x != node_in);
+            remaining_nodes.retain(|x| x != node_out);
+        }
+
+        for (i, e) in remaining_nodes.iter().enumerate() {
+            match e {
+                NodeType::Sensor(_) => out.push(format!(r#"unused-{}("{:?}")"#, i, e)),
+                NodeType::Output(_) => out.push(format!(r#"unused-{}["{:?}"]"#, i, e)),
+                _ => panic!(),
+            }
+        }
+
+        out.join("\n")
+    }
+
     pub fn simulate(&self, sensors: HashMap<S, f32>) -> HashMap<O, f32> {
         let mut out = HashMap::new();
         let node_tester = NodeTester::from_genome(self, sensors);
@@ -87,13 +152,32 @@ impl<S: Clone + Eq + Hash, O: Clone> NodeTester<S, O> {
             // If so add that to the out
             // Else recursively call prop function
             let ref_node = &self.nodes[i.node_in];
-            out += match &ref_node.node {
-                NodeType::Sensor(_) => ref_node.value,
-                _ => self.prop(i.node_in),
-            } * i.weight;
+            let val = match &ref_node.node {
+                NodeType::Sensor(_) => {
+                    println!("S] {} {}=> {}", i.node_in, i.weight.sign_str(), to);
+                    ref_node.value
+                }
+                _ => {
+                    println!("R] {} {}=> {}", i.node_in, i.weight.sign_str(), to);
+                    self.prop(i.node_in)
+                }
+            };
+            out += val * i.weight;
         }
 
         out
+    }
+}
+
+impl Gene {
+    fn random(innovation: usize, from: usize, to: usize) -> Self {
+        Self {
+            node_in: from,
+            node_out: to,
+            weight: thread_rng().gen(),
+            enabled: true,
+            innovation,
+        }
     }
 }
 

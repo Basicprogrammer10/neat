@@ -1,16 +1,38 @@
-pub struct Trainer<S, O> {
-    supplier: Box<dyn Fn() -> Vec<(S, f32)> + Send + Sync + 'static>,
-    fitness: Box<dyn Fn(Vec<(O, f32)>) -> f32 + Send + Sync + 'static>,
+use std::fmt::Debug;
+use std::hash::Hash;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
+
+use parking_lot::RwLock;
+
+use crate::genome::NodeType;
+use crate::{config::Config, genome::Genome};
+
+pub struct Trainer<S: Clone + Eq + Hash + Debug, O: Clone + Debug> {
+    pub agents: RwLock<Vec<Genome<S, O>>>,
+    innovation: AtomicUsize,
+    pub config: Config,
 }
 
-impl<S, O> Trainer<S, O> {
-    pub fn new(
-        supplier: impl Fn() -> Vec<(S, f32)> + Send + Sync + 'static,
-        fitness: impl Fn(Vec<(O, f32)>) -> f32 + Send + Sync + 'static,
-    ) -> Self {
+impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Trainer<S, O> {
+    pub fn new() -> Self {
         Self {
-            supplier: Box::new(supplier),
-            fitness: Box::new(fitness),
+            agents: RwLock::new(Vec::new()),
+            innovation: AtomicUsize::new(0),
+            config: Config::default(),
+        }
+    }
+
+    pub fn new_innovation(&self) -> usize {
+        self.innovation.fetch_add(1, Ordering::AcqRel)
+    }
+
+    pub fn populate(self: Arc<Self>, io: Vec<NodeType<S, O>>) {
+        let mut agents = self.agents.write();
+        for _ in agents.len()..self.config.population_size {
+            agents.push(Genome::new(self.clone(), io.clone()))
         }
     }
 }

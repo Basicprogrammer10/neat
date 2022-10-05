@@ -10,3 +10,7 @@ impl SignString for f32 {
         self.to_string()
     }
 }
+
+pub fn sigmoid(inp: f32) -> f32 {
+    1.0 / (1.0 + (-inp).exp())
+}
