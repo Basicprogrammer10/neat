@@ -1,7 +1,5 @@
 use std::{collections::HashMap, hash::Hash};
 
-use crate::misc::SignString;
-
 pub struct Genome<S: Clone + Eq + Hash, O: Clone> {
     pub nodes: Vec<NodeType<S, O>>,
     pub genes: Vec<Gene>,
@@ -23,11 +21,13 @@ pub enum NodeType<S: Clone + Eq + Hash, O: Clone> {
     Hidden,
 }
 
+#[derive(Clone)]
 struct NodeTester<S: Clone + Eq + Hash, O: Clone> {
     pub nodes: Vec<TestNode<S, O>>,
     pub genes: Vec<Gene>,
 }
 
+#[derive(Clone)]
 struct TestNode<S: Clone + Eq + Hash, O: Clone> {
     node: NodeType<S, O>,
     value: f32,
@@ -35,18 +35,18 @@ struct TestNode<S: Clone + Eq + Hash, O: Clone> {
 
 impl<S: Clone + Eq + Hash, O: Clone + Eq + Hash> Genome<S, O> {
     pub fn simulate(&self, sensors: HashMap<S, f32>) -> HashMap<O, f32> {
-        let mut node_tester = NodeTester::from_genome(self, sensors);
-        for i in self.genes.iter().filter(|x| x.enabled) {
-            node_tester.prop(i.node_in, i.node_out, i.weight);
+        let mut out = HashMap::new();
+        let node_tester = NodeTester::from_genome(self, sensors);
+
+        for (i, e) in self.nodes.iter().enumerate() {
+            match e {
+                NodeType::Output(o) => {
+                    out.insert(o.clone(), node_tester.clone().prop(i));
+                }
+                _ => continue,
+            }
         }
 
-        let mut out = HashMap::new();
-        for i in node_tester.nodes {
-            match i.node {
-                NodeType::Output(o) => out.insert(o, i.value),
-                _ => continue,
-            };
-        }
         out
     }
 }
@@ -73,22 +73,27 @@ impl<S: Clone + Eq + Hash, O: Clone> NodeTester<S, O> {
         }
     }
 
-    fn prop(&mut self, from: usize, to: usize, weight: f32) {
-        println!("{} {}=> {}", from, weight.sign_str(), to);
+    fn prop(&mut self, to: usize) -> f32 {
+        let mut out = 0.0;
 
-        // Update to node
-        let from_val = self.nodes[from].value;
-        self.nodes[to].value += from_val * weight;
-
-        // Propagate changes
+        // Get nodes that connect to this one
         for i in self
             .genes
             .clone()
             .iter()
-            .filter(|x| x.enabled && x.node_in == to)
+            .filter(|x| x.enabled && x.node_out == to)
         {
-            self.prop(to, i.node_out, i.weight);
+            // Check if the node this gene is refrencing is a sensor
+            // If so add that to the out
+            // Else recursively call prop function
+            let ref_node = &self.nodes[i.node_in];
+            out += match &ref_node.node {
+                NodeType::Sensor(_) => ref_node.value,
+                _ => self.prop(i.node_in),
+            } * i.weight;
         }
+
+        out
     }
 }
 
