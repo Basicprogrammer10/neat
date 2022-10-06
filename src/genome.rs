@@ -1,6 +1,5 @@
 use std::hash::Hash;
 use std::sync::Arc;
-use std::time::SystemTime;
 use std::{collections::HashMap, fmt::Debug};
 
 use rand::{seq::IteratorRandom, thread_rng, Rng};
@@ -69,6 +68,14 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         Self { nodes: io, genes }
     }
 
+    pub fn distance(&self, other: &Self) {
+        // δ = (c1 * E / N) + (c2 * D / N) + c3 * W
+        // E: Excess geanes
+        // D: Disjoint geanes
+        // W: Weight diffrence between avraged
+        // N: Geanes in the larger genome (normalised)
+    }
+
     /// Use https://mermaid.live to render debug output
     pub fn debug(&self) -> String {
         let mut out = Vec::new();
@@ -104,7 +111,9 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
     }
 
     // Checks if a edge from a -> b would cause a loop in the nural network
+    // Use depth first search,,, smh
     pub fn would_be_recursive(&self, a: usize, b: usize) -> bool {
+        // Make new network with a => b
         if a == b {
             return true;
         }
@@ -159,7 +168,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         }
 
         // Add Node
-        if rng.gen_bool(trainer.config.mutate_add_node.into()) {
+        if !this.genes.is_empty() && rng.gen_bool(trainer.config.mutate_add_node.into()) {
             let gene = this
                 .genes
                 .iter_mut()

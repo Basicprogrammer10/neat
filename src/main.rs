@@ -21,7 +21,7 @@ fn main() {
         println!("graph TD\n{}", i.debug());
 
         let mut i = i.mutate(trainer.clone());
-        for j in 0..10_000 {
+        for _ in 0..100 {
             i = i.mutate(trainer.clone());
         }
 
