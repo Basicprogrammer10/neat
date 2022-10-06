@@ -1,5 +1,6 @@
 use std::hash::Hash;
 use std::sync::Arc;
+use std::time::SystemTime;
 use std::{collections::HashMap, fmt::Debug};
 
 use rand::{seq::IteratorRandom, thread_rng, Rng};
@@ -78,7 +79,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
             let node_out = &self.nodes[i.node_out];
 
             out.push(format!(
-                r#"{}("{:?}") -{t}{}{t}-> {}["{:?}"]"#,
+                r#"{}("{:?}") -{t} {} {t}-> {}["{:?}"]"#,
                 i.node_in,
                 node_in,
                 i.weight.sign_str(),
@@ -123,7 +124,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         for i in &mut this.genes {
             if rng.gen_bool(trainer.config.mutate_weight.into()) {
                 if rng.gen_bool(trainer.config.mutate_weight.into()) {
-                    i.weight = rng.gen();
+                    i.weight = rng.gen_range(-1f32..=1f32);
                     continue;
                 }
                 i.weight *= rng.gen::<f32>()
@@ -131,16 +132,17 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         }
 
         // Add Edge
+        // TODO: Needs optimization for large networks (thousands of edges)
         if rng.gen_bool(trainer.config.mutate_add_edge.into()) {
             for _ in 0..trainer.config.mutate_add_edge_tries {
                 // Genarate Indexes
+
                 let a = rng.gen_range(0..nodes);
                 let b = rng.gen_range(0..nodes);
 
                 // Verify Indexes
                 // Make sure not pointing to the same node twice, going in order of sensor => (hidden) => output
                 // not the other way around and the connection would not make a recursive connection
-
                 if a == b
                     || this.genes.iter().any(|x| x.connects(a, b))
                     || matches!(this.nodes[a], NodeType::Output(_))
@@ -258,7 +260,7 @@ impl Gene {
         Self {
             node_in: from,
             node_out: to,
-            weight: thread_rng().gen(),
+            weight: thread_rng().gen_range(-1f32..=1f32),
             enabled: true,
             innovation,
         }

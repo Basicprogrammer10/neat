@@ -24,7 +24,7 @@ pub struct Config {
     /// The chance to add an edge to genome
     pub mutate_add_edge: f32,
     /// The number of attempts to make on creating a new edge
-    pub mutate_add_edge_tries: usize
+    pub mutate_add_edge_tries: usize,
 }
 
 // Default values stolen from the NEAT paper
@@ -41,7 +41,7 @@ impl Default for Config {
             mutate_weight_reset: 0.1,
             mutate_add_node: 0.03,
             mutate_add_edge: 0.05,
-            mutate_add_edge_tries: 20
+            mutate_add_edge_tries: 20,
         }
     }
 }

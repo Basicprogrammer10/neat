@@ -21,11 +21,18 @@ fn main() {
         println!("graph TD\n{}", i.debug());
 
         let mut i = i.mutate(trainer.clone());
-        for _ in 0..100 {
+        for j in 0..10_000 {
             i = i.mutate(trainer.clone());
         }
 
         println!("graph TD\n{}", i.debug());
+
+        let mut map = HashMap::new();
+        map.insert(Sensor::A, 1.0);
+        map.insert(Sensor::B, 1.0);
+
+        println!("SIMULATION");
+        println!("\n> {}", i.simulate(map).get(&Output).unwrap());
     }
 
     // Simulate
@@ -53,20 +60,28 @@ enum Sensor {
 struct Output;
 
 /*
+== Example Implamentation =
+- https://github.com/yaricom/goNEAT
+
+== TODO ==
+
 * New genomes start with 0 hidden nodes
-- Look into using a normal distrubution
-- The types of mutations are as follows:
-    - Weight Mutations (Same as normal GAs)
+* The types of mutations are as follows:
+    * Weight Mutations (Same as normal GAs)
       Each edge has a chace for meing mutated or not
-    - Structure Mutations (2 types)
-      - Node additions: An edge is selected and disabled. A node is then inserted and two new edged
+    * Structure Mutations (2 types)
+      * Node additions: An edge is selected and disabled. A node is then inserted and two new edged
         are created. The one preceding the node is givin a weight of 1.0 and the one following the new node
         inhearits the old edges weight. The new geanes each net new innovations numbers.
-      - Edge additions: A new edge with a random weight is added between two unconnected nodes
+      * Edge additions: A new edge with a random weight is added between two unconnected nodes
 - Crossover
     - Matching neanes are randomly selected from each parent whule the extra geanes are pulled from the more fit parent
     - The distance function says that `distance = (E * c1 / N) + (D * c2 / N) + c3 * <AVG WEIGHT>` where E is the count of excess geanes
       D is the count of disjoint geanes N is the count of geanes in the larger genome and the coeffecents aredefined in a config (Referer to page 109 - 110)
+
+- Selection
+- Debug weird freezes when doing tens of thousands of mutations
+- While less than 15 genes bias add node operation to older genes
 */
 
 // TEST GENOME
