@@ -4,7 +4,7 @@ mod config;
 mod genome;
 mod misc;
 mod trainer;
-use genome::{Gene, Genome, NodeType};
+use genome::NodeType;
 use misc::sigmoid;
 
 use crate::trainer::Trainer;
@@ -17,7 +17,25 @@ fn main() {
         NodeType::Output(Output),
     ]);
 
-    println!("graph TD\n{}", trainer.agents.read()[0].debug());
+    for i in trainer.agents.read().iter().take(1) {
+        println!("graph TD\n{}", i.debug());
+
+        let mut i = i.mutate(trainer.clone());
+        for _ in 0..100 {
+            i = i.mutate(trainer.clone());
+        }
+
+        println!("graph TD\n{}", i.debug());
+    }
+
+    // Simulate
+    // let mut map = HashMap::new();
+    // map.insert(Sensor::A, 1.0);
+    // map.insert(Sensor::B, 1.0);
+
+    // for (i, e) in trainer.agents.read().iter().enumerate() {
+    //     println!("#{} {}", i, e.simulate(map.clone()).get(&Output).unwrap());
+    // }
 }
 
 fn fitness(out: HashMap<Output, f32>) -> f32 {
@@ -35,7 +53,8 @@ enum Sensor {
 struct Output;
 
 /*
-- New genomes start with 0 hidden nodes
+* New genomes start with 0 hidden nodes
+- Look into using a normal distrubution
 - The types of mutations are as follows:
     - Weight Mutations (Same as normal GAs)
       Each edge has a chace for meing mutated or not

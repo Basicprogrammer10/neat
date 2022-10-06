@@ -9,6 +9,7 @@ use crate::{
     trainer::Trainer,
 };
 
+#[derive(Clone)]
 pub struct Genome<S: Clone + Eq + Hash, O: Clone> {
     pub nodes: Vec<NodeType<S, O>>,
     pub genes: Vec<Gene>,
@@ -67,6 +68,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         Self { nodes: io, genes }
     }
 
+    /// Use https://mermaid.live to render debug output
     pub fn debug(&self) -> String {
         let mut out = Vec::new();
         let mut remaining_nodes = self.nodes.clone();
@@ -76,12 +78,13 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
             let node_out = &self.nodes[i.node_out];
 
             out.push(format!(
-                r#"{}("{:?}") --{}--> {}["{:?}"]"#,
+                r#"{}("{:?}") -{t}{}{t}-> {}["{:?}"]"#,
                 i.node_in,
                 node_in,
                 i.weight.sign_str(),
                 i.node_out,
-                node_out
+                node_out,
+                t = if i.enabled { "-" } else { "." }
             ));
 
             remaining_nodes.retain(|x| x != node_in);
@@ -99,6 +102,87 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         out.join("\n")
     }
 
+    // Checks if a edge from a -> b would cause a loop in the nural network
+    pub fn would_be_recursive(&self, a: usize, b: usize) -> bool {
+        if a == b {
+            return true;
+        }
+
+        self.genes
+            .iter()
+            .filter(|x| x.enabled)
+            .any(|x| x.node_in == b && self.would_be_recursive(a, x.node_out))
+    }
+
+    pub fn mutate(&self, trainer: Arc<Trainer<S, O>>) -> Self {
+        let mut rng = thread_rng();
+        let mut this = self.clone();
+        let nodes = this.nodes.len();
+
+        // Mutate Weights
+        for i in &mut this.genes {
+            if rng.gen_bool(trainer.config.mutate_weight.into()) {
+                if rng.gen_bool(trainer.config.mutate_weight.into()) {
+                    i.weight = rng.gen();
+                    continue;
+                }
+                i.weight *= rng.gen::<f32>()
+            }
+        }
+
+        // Add Edge
+        if rng.gen_bool(trainer.config.mutate_add_edge.into()) {
+            for _ in 0..trainer.config.mutate_add_edge_tries {
+                // Genarate Indexes
+                let a = rng.gen_range(0..nodes);
+                let b = rng.gen_range(0..nodes);
+
+                // Verify Indexes
+                // Make sure not pointing to the same node twice, going in order of sensor => (hidden) => output
+                // not the other way around and the connection would not make a recursive connection
+
+                if a == b
+                    || this.genes.iter().any(|x| x.connects(a, b))
+                    || matches!(this.nodes[a], NodeType::Output(_))
+                    || matches!(this.nodes[b], NodeType::Sensor(_))
+                    || this.would_be_recursive(a, b)
+                {
+                    continue;
+                }
+
+                this.genes
+                    .push(Gene::random(trainer.new_innovation(), a, b));
+                break;
+            }
+        }
+
+        // Add Node
+        if rng.gen_bool(trainer.config.mutate_add_node.into()) {
+            let gene = this
+                .genes
+                .iter_mut()
+                .filter(|x| x.enabled)
+                .choose(&mut rng)
+                .unwrap();
+            let old_node_from = gene.node_in;
+            let old_node_to = gene.node_out;
+
+            gene.enabled = false;
+            this.nodes.push(NodeType::Hidden);
+            this.genes.push(Gene {
+                node_in: old_node_from,
+                node_out: nodes,
+                weight: 1.0,
+                enabled: true,
+                innovation: trainer.new_innovation(),
+            });
+            this.genes
+                .push(Gene::random(trainer.new_innovation(), nodes, old_node_to));
+        }
+
+        this
+    }
+
     pub fn simulate(&self, sensors: HashMap<S, f32>) -> HashMap<O, f32> {
         let mut out = HashMap::new();
         let node_tester = NodeTester::from_genome(self, sensors);
@@ -106,7 +190,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         for (i, e) in self.nodes.iter().enumerate() {
             match e {
                 NodeType::Output(o) => {
-                    out.insert(o.clone(), node_tester.clone().prop(i));
+                    out.insert(o.clone(), sigmoid(node_tester.clone().prop(i)));
                 }
                 _ => continue,
             }
@@ -154,11 +238,11 @@ impl<S: Clone + Eq + Hash, O: Clone> NodeTester<S, O> {
             let ref_node = &self.nodes[i.node_in];
             let val = match &ref_node.node {
                 NodeType::Sensor(_) => {
-                    println!("S] {} {}=> {}", i.node_in, i.weight.sign_str(), to);
+                    // println!("S] {} {}=> {}", i.node_in, i.weight.sign_str(), to);
                     ref_node.value
                 }
                 _ => {
-                    println!("R] {} {}=> {}", i.node_in, i.weight.sign_str(), to);
+                    // println!("R] {} {}=> {}", i.node_in, i.weight.sign_str(), to);
                     self.prop(i.node_in)
                 }
             };
@@ -178,6 +262,10 @@ impl Gene {
             enabled: true,
             innovation,
         }
+    }
+
+    fn connects(&self, a: usize, b: usize) -> bool {
+        (self.node_in == a && self.node_out == b) || (self.node_in == b && self.node_out == a)
     }
 }
 

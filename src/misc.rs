@@ -12,5 +12,5 @@ impl SignString for f32 {
 }
 
 pub fn sigmoid(inp: f32) -> f32 {
-    1.0 / (1.0 + (-inp).exp())
+    1.0 / (1.0 + (-4.9 * inp).exp())
 }
