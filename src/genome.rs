@@ -1,7 +1,11 @@
+use std::cell::RefCell;
 use std::hash::Hash;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::{collections::HashMap, fmt::Debug};
 
+use bitvec::prelude::Lsb0;
+use bitvec::vec::BitVec;
 use rand::{seq::IteratorRandom, thread_rng, Rng};
 
 use crate::{
@@ -111,17 +115,36 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
     }
 
     // Checks if a edge from a -> b would cause a loop in the nural network
-    // Use depth first search,,, smh
     pub fn would_be_recursive(&self, a: usize, b: usize) -> bool {
-        // Make new network with a => b
-        if a == b {
-            return true;
+        let mut new = self.clone();
+        new.genes.push(Gene {
+            node_in: a,
+            node_out: b,
+            weight: 0.0,
+            enabled: true,
+            innovation: 0,
+        });
+        new.is_recursive()
+    }
+
+    pub fn is_recursive(&self) -> bool {
+        for (i, _) in self
+            .nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| matches!(x, NodeType::Sensor(_)))
+        {
+            let mut seen_nodes = BitVec::<usize, Lsb0>::new();
+            seen_nodes.extend([false].repeat(self.nodes.len()));
+            seen_nodes.set(i, true);
+
+            let rc = Rc::new(RefCell::new(seen_nodes));
+            if is_recursive_checker(rc.clone(), &self.genes, i) {
+                return true;
+            }
         }
 
-        self.genes
-            .iter()
-            .filter(|x| x.enabled)
-            .any(|x| x.node_in == b && self.would_be_recursive(a, x.node_out))
+        false
     }
 
     pub fn mutate(&self, trainer: Arc<Trainer<S, O>>) -> Self {
@@ -141,7 +164,6 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         }
 
         // Add Edge
-        // TODO: Needs optimization for large networks (thousands of edges)
         if rng.gen_bool(trainer.config.mutate_add_edge.into()) {
             for _ in 0..trainer.config.mutate_add_edge_tries {
                 // Genarate Indexes
@@ -287,4 +309,17 @@ impl<S: Clone + Eq + Hash, O: Clone> Into<TestNode<S, O>> for NodeType<S, O> {
             value: 0.0,
         }
     }
+}
+
+fn is_recursive_checker(seen_nodes: Rc<RefCell<BitVec>>, genes: &[Gene], index: usize) -> bool {
+    let nodes = seen_nodes.clone();
+    for i in genes.iter().filter(|x| x.enabled && x.node_in == index) {
+        let seen = *nodes.borrow().get(i.node_out).unwrap();
+        nodes.borrow_mut().set(i.node_out, true);
+        if seen || is_recursive_checker(seen_nodes.clone(), genes, i.node_out) {
+            return true;
+        }
+    }
+
+    false
 }

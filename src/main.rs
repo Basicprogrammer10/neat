@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    io::{stdout, Write},
+    sync::Arc,
+};
 
 mod config;
 mod genome;
@@ -17,11 +21,13 @@ fn main() {
         NodeType::Output(Output),
     ]);
 
-    for i in trainer.agents.read().iter().take(1) {
+    for i in trainer.agents.read().iter() {
         println!("graph TD\n{}", i.debug());
 
         let mut i = i.mutate(trainer.clone());
-        for _ in 0..100 {
+        for j in 0..100 {
+            print!("\r{j}");
+            stdout().flush().unwrap();
             i = i.mutate(trainer.clone());
         }
 
@@ -32,7 +38,7 @@ fn main() {
         map.insert(Sensor::B, 1.0);
 
         println!("SIMULATION");
-        println!("\n> {}", i.simulate(map).get(&Output).unwrap());
+        println!("> {}\n", i.simulate(map).get(&Output).unwrap());
     }
 
     // Simulate
