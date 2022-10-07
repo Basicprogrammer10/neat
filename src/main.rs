@@ -17,13 +17,15 @@ fn main() {
         NodeType::Output(Output),
     ]);
 
+    let mut map = HashMap::new();
+    map.insert(Sensor::A, 1.0);
+    map.insert(Sensor::B, 1.0);
+
     // for i in trainer.agents.read().iter() {
     //     println!("graph TD\n{}", i.debug());
 
     //     let mut i = i.mutate(trainer.clone());
     //     for j in 0..100 {
-    //         print!("\r{j}");
-    //         stdout().flush().unwrap();
     //         i = i.mutate(trainer.clone());
     //     }
 
@@ -40,7 +42,7 @@ fn main() {
     let agents = trainer.agents.read();
     let a = agents.get(0).unwrap();
     let mut b = a.to_owned();
-    for _ in 0..10 {
+    for _ in 0..100 {
         b = b.mutate(trainer.clone());
     }
     println!("A\n===\n{}\n", a.debug());
@@ -48,22 +50,18 @@ fn main() {
     println!("Distance: {}", a.distance(trainer.clone(), &b));
 
     let mut times = Vec::new();
-    for _ in 0..1000 {
+    for _ in 0..1_000_000 {
         let start = SystemTime::now();
-        a.distance(trainer.clone(), &b);
+        b.simulate(&map);
         let time = start.elapsed().unwrap().as_nanos();
         times.push(time);
     }
     println!(
-        "AVG Time: {}ns",
+        "SIM AVG Time: {}ns",
         times.iter().sum::<u128>() as f32 / times.len() as f32
     );
 
     // Simulate
-    // let mut map = HashMap::new();
-    // map.insert(Sensor::A, 1.0);
-    // map.insert(Sensor::B, 1.0);
-
     // for (i, e) in trainer.agents.read().iter().enumerate() {
     //     println!("#{} {}", i, e.simulate(map.clone()).get(&Output).unwrap());
     // }

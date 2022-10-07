@@ -44,7 +44,7 @@ struct NodeTester<S: Clone + Eq + Hash, O: Clone> {
 #[derive(Clone)]
 struct TestNode<S: Clone + Eq + Hash, O: Clone> {
     node: NodeType<S, O>,
-    value: Option<f32>,
+    value: RefCell<Option<f32>>,
 }
 
 impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
@@ -175,7 +175,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
     }
 
     // Checks if a edge from a -> b would cause a loop in the nural network
-    pub fn would_be_recursive(&self, a: usize, b: usize) -> bool {
+    fn would_be_recursive(&self, a: usize, b: usize) -> bool {
         let mut new = self.clone();
         new.genes.push(Gene {
             node_in: a,
@@ -187,7 +187,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         new.is_recursive()
     }
 
-    pub fn is_recursive(&self) -> bool {
+    fn is_recursive(&self) -> bool {
         for (i, _) in self
             .nodes
             .iter()
@@ -276,9 +276,9 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         this
     }
 
-    pub fn simulate(&self, sensors: HashMap<S, f32>) -> HashMap<O, f32> {
+    pub fn simulate(&self, sensors: &HashMap<S, f32>) -> HashMap<O, f32> {
         let mut out = HashMap::new();
-        let node_tester = NodeTester::from_genome(self, sensors);
+        let node_tester = Rc::new(NodeTester::from_genome(self, sensors));
 
         for (i, e) in self.nodes.iter().enumerate() {
             match e {
@@ -294,7 +294,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
 }
 
 impl<S: Clone + Eq + Hash, O: Clone> NodeTester<S, O> {
-    fn from_genome(genome: &Genome<S, O>, sensors: HashMap<S, f32>) -> Self {
+    fn from_genome(genome: &Genome<S, O>, sensors: &HashMap<S, f32>) -> Self {
         Self {
             nodes: genome
                 .nodes
@@ -302,12 +302,12 @@ impl<S: Clone + Eq + Hash, O: Clone> NodeTester<S, O> {
                 .cloned()
                 .map(|x| match x {
                     NodeType::Sensor(ref s) => TestNode {
-                        value: Some(*sensors.get(s).unwrap()),
+                        value: RefCell::new(Some(*sensors.get(s).unwrap())),
                         node: x,
                     },
                     _ => TestNode {
                         node: x,
-                        value: None,
+                        value: RefCell::new(None),
                     },
                 })
                 .collect(),
@@ -315,24 +315,20 @@ impl<S: Clone + Eq + Hash, O: Clone> NodeTester<S, O> {
         }
     }
 
-    fn prop(&mut self, to: usize) -> f32 {
+    fn prop(self: Rc<Self>, to: usize) -> f32 {
         let mut out = 0.0;
 
         // Get nodes that connect to this one
-        for i in self
-            .genes
-            .clone()
-            .iter()
-            .filter(|x| x.enabled && x.node_out == to)
-        {
+        for i in self.genes.iter().filter(|x| x.enabled && x.node_out == to) {
             // Check if the node this gene is refrencing is a sensor
             // If so add that to the out
             // Else recursively call prop function
+            let new_self = self.clone();
             let ref_node = &self.nodes[i.node_in];
-            let val = match ref_node.value {
-                Some(i) => i,
-                None => self.prop(i.node_in),
-            };
+            let val = ref_node
+                .value
+                .borrow()
+                .unwrap_or_else(|| new_self.prop(i.node_in));
             out += val * i.weight;
         }
 
@@ -360,7 +356,7 @@ impl<S: Clone + Eq + Hash, O: Clone> Into<TestNode<S, O>> for NodeType<S, O> {
     fn into(self) -> TestNode<S, O> {
         TestNode {
             node: self,
-            value: None,
+            value: RefCell::new(None),
         }
     }
 }
