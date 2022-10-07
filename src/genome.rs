@@ -36,15 +36,9 @@ pub enum NodeType<S: Clone + Eq + Hash, O: Clone> {
 }
 
 #[derive(Clone)]
-struct NodeTester<S: Clone + Eq + Hash, O: Clone> {
-    pub nodes: Vec<TestNode<S, O>>,
+struct NodeTester {
+    pub nodes: Vec<RefCell<Option<f32>>>,
     pub genes: Vec<Gene>,
-}
-
-#[derive(Clone)]
-struct TestNode<S: Clone + Eq + Hash, O: Clone> {
-    node: NodeType<S, O>,
-    value: RefCell<Option<f32>>,
 }
 
 impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
@@ -293,22 +287,21 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
     }
 }
 
-impl<S: Clone + Eq + Hash, O: Clone> NodeTester<S, O> {
-    fn from_genome(genome: &Genome<S, O>, sensors: &HashMap<S, f32>) -> Self {
+impl NodeTester {
+    fn from_genome<S: Clone + Eq + Hash, O: Clone>(
+        genome: &Genome<S, O>,
+        sensors: &HashMap<S, f32>,
+    ) -> Self {
         Self {
             nodes: genome
                 .nodes
                 .iter()
                 .cloned()
-                .map(|x| match x {
-                    NodeType::Sensor(ref s) => TestNode {
-                        value: RefCell::new(Some(*sensors.get(s).unwrap())),
-                        node: x,
-                    },
-                    _ => TestNode {
-                        node: x,
-                        value: RefCell::new(None),
-                    },
+                .map(|x| {
+                    RefCell::new(match x {
+                        NodeType::Sensor(ref s) => Some(*sensors.get(s).unwrap()),
+                        _ => None,
+                    })
                 })
                 .collect(),
             genes: genome.genes.clone(),
@@ -326,7 +319,6 @@ impl<S: Clone + Eq + Hash, O: Clone> NodeTester<S, O> {
             let new_self = self.clone();
             let ref_node = &self.nodes[i.node_in];
             let val = ref_node
-                .value
                 .borrow()
                 .unwrap_or_else(|| new_self.prop(i.node_in));
             out += val * i.weight;
@@ -349,15 +341,6 @@ impl Gene {
 
     fn connects(&self, a: usize, b: usize) -> bool {
         (self.node_in == a && self.node_out == b) || (self.node_in == b && self.node_out == a)
-    }
-}
-
-impl<S: Clone + Eq + Hash, O: Clone> Into<TestNode<S, O>> for NodeType<S, O> {
-    fn into(self) -> TestNode<S, O> {
-        TestNode {
-            node: self,
-            value: RefCell::new(None),
-        }
     }
 }
 
