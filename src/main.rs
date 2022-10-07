@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    io::{stdout, Write},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 mod config;
 mod genome;
@@ -21,25 +17,35 @@ fn main() {
         NodeType::Output(Output),
     ]);
 
-    for i in trainer.agents.read().iter() {
-        println!("graph TD\n{}", i.debug());
+    // for i in trainer.agents.read().iter() {
+    //     println!("graph TD\n{}", i.debug());
 
-        let mut i = i.mutate(trainer.clone());
-        for j in 0..100 {
-            print!("\r{j}");
-            stdout().flush().unwrap();
-            i = i.mutate(trainer.clone());
-        }
+    //     let mut i = i.mutate(trainer.clone());
+    //     for j in 0..100 {
+    //         print!("\r{j}");
+    //         stdout().flush().unwrap();
+    //         i = i.mutate(trainer.clone());
+    //     }
 
-        println!("graph TD\n{}", i.debug());
+    //     println!("graph TD\n{}", i.debug());
 
-        let mut map = HashMap::new();
-        map.insert(Sensor::A, 1.0);
-        map.insert(Sensor::B, 1.0);
+    //     let mut map = HashMap::new();
+    //     map.insert(Sensor::A, 1.0);
+    //     map.insert(Sensor::B, 1.0);
 
-        println!("SIMULATION");
-        println!("> {}\n", i.simulate(map).get(&Output).unwrap());
+    //     println!("SIMULATION");
+    //     println!("> {}\n", i.simulate(map).get(&Output).unwrap());
+    // }
+
+    let agents = trainer.agents.read();
+    let a = agents.get(0).unwrap();
+    let mut b = a.to_owned();
+    for _ in 0..10 {
+        b = b.mutate(trainer.clone());
     }
+    println!("A\n===\n{}\n", a.debug());
+    println!("B\n===\n{}\n", b.debug());
+    println!("Distance: {}", a.distance(trainer.clone(), &b));
 
     // Simulate
     // let mut map = HashMap::new();

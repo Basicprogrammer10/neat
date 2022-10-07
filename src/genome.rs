@@ -72,12 +72,73 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         Self { nodes: io, genes }
     }
 
-    pub fn distance(&self, other: &Self) {
-        // δ = (c1 * E / N) + (c2 * D / N) + c3 * W
-        // E: Excess geanes
-        // D: Disjoint geanes
-        // W: Weight diffrence between avraged
-        // N: Geanes in the larger genome (normalised)
+    // δ = (c1 * E / N) + (c2 * D / N) + c3 * W
+    // E: Excess geanes
+    // D: Disjoint geanes
+    // W: Weight diffrence between avraged
+    // N: Geanes in the larger genome (normalised)
+    pub fn distance(&self, trainer: Arc<Trainer<S, O>>, other: &Self) -> f32 {
+        // Gets all the innovations numbers of the 'other' geanome
+        let other_innovations = other.genes.iter().map(|x| x.innovation).collect::<Vec<_>>();
+        let self_innovations = self.genes.iter().map(|x| x.innovation).collect::<Vec<_>>();
+        let matching_innovations = self
+            .genes
+            .iter()
+            .map(|x| x.innovation)
+            .filter(|x| other_innovations.contains(x))
+            .collect::<Vec<_>>();
+
+        // Get the count of excess geanes
+        let self_max_innovation = self.genes.iter().map(|x| x.innovation).sum::<usize>();
+        let other_max_innovation = other_innovations.iter().sum::<usize>();
+        let min_max_innovation = self_max_innovation.min(other_max_innovation);
+        let e = if self_max_innovation > other_max_innovation {
+            &self.genes
+        } else {
+            &other.genes
+        }
+        .iter()
+        .filter(|x| x.innovation > min_max_innovation)
+        .count();
+
+        // Get the count of disjoint genes
+        let mut disjoint_innovations = other_innovations;
+        disjoint_innovations.extend(self_innovations);
+        disjoint_innovations
+            .retain(|x| *x < min_max_innovation && !matching_innovations.contains(x));
+        let d = disjoint_innovations.len();
+
+        // Get the larger gene count (normalised)
+        let mut n = self.genes.len().max(other.genes.len());
+        if n < 20 {
+            n = 1;
+        }
+
+        // Get avrage weight diffrence
+        let self_matching_weight = self
+            .genes
+            .iter()
+            .filter(|x| matching_innovations.contains(&x.innovation))
+            .map(|x| x.weight);
+        let other_matching_weight = other
+            .genes
+            .iter()
+            .filter(|x| matching_innovations.contains(&x.innovation))
+            .map(|x| x.weight);
+        let w = self_matching_weight
+            .zip(other_matching_weight)
+            .map(|(a, b)| (a - b).abs())
+            .sum::<f32>()
+            / matching_innovations.len() as f32;
+
+        // Distance Equastion
+        let c1 = trainer.config.compatibility_1;
+        let c2 = trainer.config.compatibility_2;
+        let c3 = trainer.config.compatibility_3;
+        let n = n as f32;
+
+        dbg!(e, d, w, n);
+        (c1 * e as f32 / n) + (c2 * d as f32 / n) + c3 * w as f32
     }
 
     /// Use https://mermaid.live to render debug output
