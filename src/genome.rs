@@ -44,7 +44,7 @@ struct NodeTester<S: Clone + Eq + Hash, O: Clone> {
 #[derive(Clone)]
 struct TestNode<S: Clone + Eq + Hash, O: Clone> {
     node: NodeType<S, O>,
-    value: f32,
+    value: Option<f32>,
 }
 
 impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
@@ -302,12 +302,12 @@ impl<S: Clone + Eq + Hash, O: Clone> NodeTester<S, O> {
                 .cloned()
                 .map(|x| match x {
                     NodeType::Sensor(ref s) => TestNode {
-                        value: *sensors.get(s).unwrap(),
+                        value: Some(*sensors.get(s).unwrap()),
                         node: x,
                     },
                     _ => TestNode {
                         node: x,
-                        value: 0.0,
+                        value: None,
                     },
                 })
                 .collect(),
@@ -329,15 +329,9 @@ impl<S: Clone + Eq + Hash, O: Clone> NodeTester<S, O> {
             // If so add that to the out
             // Else recursively call prop function
             let ref_node = &self.nodes[i.node_in];
-            let val = match &ref_node.node {
-                NodeType::Sensor(_) => {
-                    // println!("S] {} {}=> {}", i.node_in, i.weight.sign_str(), to);
-                    ref_node.value
-                }
-                _ => {
-                    // println!("R] {} {}=> {}", i.node_in, i.weight.sign_str(), to);
-                    self.prop(i.node_in)
-                }
+            let val = match ref_node.value {
+                Some(i) => i,
+                None => self.prop(i.node_in),
             };
             out += val * i.weight;
         }
@@ -366,7 +360,7 @@ impl<S: Clone + Eq + Hash, O: Clone> Into<TestNode<S, O>> for NodeType<S, O> {
     fn into(self) -> TestNode<S, O> {
         TestNode {
             node: self,
-            value: 0.0,
+            value: None,
         }
     }
 }
