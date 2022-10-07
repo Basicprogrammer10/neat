@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::SystemTime};
 
 mod config;
 mod genome;
@@ -47,6 +47,18 @@ fn main() {
     println!("B\n===\n{}\n", b.debug());
     println!("Distance: {}", a.distance(trainer.clone(), &b));
 
+    let mut times = Vec::new();
+    for _ in 0..1000 {
+        let start = SystemTime::now();
+        a.distance(trainer.clone(), &b);
+        let time = start.elapsed().unwrap().as_nanos();
+        times.push(time);
+    }
+    println!(
+        "AVG Time: {}ns",
+        times.iter().sum::<u128>() as f32 / times.len() as f32
+    );
+
     // Simulate
     // let mut map = HashMap::new();
     // map.insert(Sensor::A, 1.0);
@@ -92,7 +104,7 @@ struct Output;
       D is the count of disjoint geanes N is the count of geanes in the larger genome and the coeffecents aredefined in a config (Referer to page 109 - 110)
 
 - Selection
-- Debug weird freezes when doing tens of thousands of mutations
+* Debug weird freezes when doing tens of thousands of mutations
 - While less than 15 genes bias add node operation to older genes
 */
 

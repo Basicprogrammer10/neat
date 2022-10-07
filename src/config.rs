@@ -8,10 +8,9 @@ pub struct Config {
     pub init_edge_chance: f32,
 
     // == COMPATIBILITY COEFFICIENTS ==
-    // Referr to the NEAT documentation on these,,,
-    pub compatibility_1: f32,
-    pub compatibility_2: f32,
-    pub compatibility_3: f32,
+    pub excess_comp: f32,
+    pub disjoint_comp: f32,
+    pub weight_comp: f32,
     pub compatibility_threshold: f32,
 
     // == MUTATION CHANCES ==
@@ -33,9 +32,9 @@ impl Default for Config {
         Self {
             population_size: 150,
             init_edge_chance: 0.75,
-            compatibility_1: 1.0,
-            compatibility_2: 1.0,
-            compatibility_3: 0.4,
+            excess_comp: 1.0,
+            disjoint_comp: 1.0,
+            weight_comp: 0.4,
             compatibility_threshold: 3.0,
             mutate_weight: 0.8,
             mutate_weight_reset: 0.1,

@@ -132,12 +132,11 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
             / matching_innovations.len() as f32;
 
         // Distance Equastion
-        let c1 = trainer.config.compatibility_1;
-        let c2 = trainer.config.compatibility_2;
-        let c3 = trainer.config.compatibility_3;
+        let c1 = trainer.config.excess_comp;
+        let c2 = trainer.config.disjoint_comp;
+        let c3 = trainer.config.weight_comp;
         let n = n as f32;
 
-        dbg!(e, d, w, n);
         (c1 * e as f32 / n) + (c2 * d as f32 / n) + c3 * w as f32
     }
 
