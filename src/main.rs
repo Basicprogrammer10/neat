@@ -1,22 +1,16 @@
-use std::fmt::Debug;
 use std::sync::Arc;
-use std::{collections::HashMap, hash::Hash};
 
 mod config;
 mod genome;
 mod misc;
 mod trainer;
-use genome::{Genome, NodeType};
+use genome::Genome;
 
 use crate::trainer::Trainer;
 
 fn main() {
-    let trainer = Arc::new(Trainer::<Sensor, Output>::new());
-    trainer.clone().populate(vec![
-        NodeType::Sensor(Sensor::A),
-        NodeType::Sensor(Sensor::B),
-        NodeType::Output(Output),
-    ]);
+    let trainer = Arc::new(Trainer::new(2, 1));
+    trainer.clone().populate();
 
     for gen in 0..200 {
         let species = trainer.clone().species_categorize();
@@ -30,30 +24,18 @@ fn main() {
     }
 }
 
-fn fit(_: usize, g: &Genome<Sensor, Output>) -> f32 {
+fn fit(_: usize, g: &Genome) -> f32 {
     let mut sum = 0.0;
-    let mut map = HashMap::new();
 
     for i in [[false, false], [false, true], [true, false], [true, true]] {
-        map.insert(Sensor::A, i[0] as usize as f32);
-        map.insert(Sensor::B, i[1] as usize as f32);
-
+        let inp = [i[0] as usize as f32, i[1] as usize as f32];
         let real = (i[0] ^ i[1]) as usize as f32;
-        let got = *g.simulate(&map).get(&Output).unwrap();
+        let got = g.simulate(&inp)[0];
         sum += (real - got).abs();
     }
 
     4.0 - sum
 }
-
-#[derive(Clone, Hash, PartialEq, Eq, Debug)]
-enum Sensor {
-    A,
-    B,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct Output;
 
 /*
 == Example Implamentation =

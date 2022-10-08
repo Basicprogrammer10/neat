@@ -1,7 +1,4 @@
 use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::hash::Hash;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -13,20 +10,26 @@ use rand::{thread_rng, Rng};
 use crate::genome::NodeType;
 use crate::{config::Config, genome::Genome};
 
-pub struct Trainer<S: Clone + Eq + Hash + Debug, O: Clone + Debug> {
+pub struct Trainer {
+    // == INFO ==
+    inputs: usize,
+    outputs: usize,
+
     // == GENOME ==
-    pub agents: RwLock<Vec<Genome<S, O>>>,
+    pub agents: RwLock<Vec<Genome>>,
     /// Species ID, Case 0 Genome
-    pub species: RwLock<Vec<(usize, Genome<S, O>)>>,
+    pub species: RwLock<Vec<(usize, Genome)>>,
     innovation: AtomicUsize,
 
     // == SIMULATION ==
     pub config: Config,
 }
 
-impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Trainer<S, O> {
-    pub fn new() -> Self {
+impl Trainer {
+    pub fn new(inputs: usize, outputs: usize) -> Self {
         Self {
+            inputs,
+            outputs,
             agents: RwLock::new(Vec::new()),
             species: RwLock::new(Vec::new()),
             innovation: AtomicUsize::new(0),
@@ -38,10 +41,14 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Trainer<S, O> {
         self.innovation.fetch_add(1, Ordering::AcqRel)
     }
 
-    pub fn populate(self: Arc<Self>, io: Vec<NodeType<S, O>>) {
+    pub fn populate(self: Arc<Self>) {
         let mut agents = self.agents.write();
+        let mut base_nodes = Vec::with_capacity(self.inputs + self.outputs);
+        base_nodes.extend([NodeType::Sensor].repeat(self.inputs));
+        base_nodes.extend([NodeType::Output].repeat(self.outputs));
+
         for _ in agents.len()..self.config.population_size {
-            agents.push(Genome::new(self.clone(), io.clone()))
+            agents.push(Genome::new(self.clone(), base_nodes.clone()))
         }
     }
 
@@ -81,7 +88,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Trainer<S, O> {
         out
     }
 
-    pub fn fitness(&self, fitness: impl Fn(usize, &Genome<S, O>) -> f32) -> Vec<f32> {
+    pub fn fitness(&self, fitness: impl Fn(usize, &Genome) -> f32) -> Vec<f32> {
         let agents = self.agents.borrow().read();
         agents
             .iter()

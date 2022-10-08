@@ -1,8 +1,7 @@
 use std::cell::RefCell;
-use std::hash::Hash;
+use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::{collections::HashMap, fmt::Debug};
 
 use bitvec::prelude::Lsb0;
 use bitvec::vec::BitVec;
@@ -14,8 +13,8 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct Genome<S: Clone + Eq + Hash, O: Clone> {
-    pub nodes: Vec<NodeType<S, O>>,
+pub struct Genome {
+    pub nodes: Vec<NodeType>,
     pub genes: Vec<Gene>,
 }
 
@@ -28,10 +27,10 @@ pub struct Gene {
     pub innovation: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NodeType<S: Clone + Eq + Hash, O: Clone> {
-    Sensor(S),
-    Output(O),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeType {
+    Sensor,
+    Output,
     Hidden,
 }
 
@@ -41,18 +40,18 @@ struct NodeTester {
     pub genes: Vec<Gene>,
 }
 
-impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
-    pub fn new(trainer: Arc<Trainer<S, O>>, io: Vec<NodeType<S, O>>) -> Self {
+impl Genome {
+    pub fn new(trainer: Arc<Trainer>, io: Vec<NodeType>) -> Self {
         let mut genes = Vec::new();
         for (i, e) in io.iter().enumerate() {
             match e {
-                NodeType::Sensor(_) => {
+                NodeType::Sensor => {
                     if thread_rng().gen_bool(trainer.config.init_edge_chance.into()) {
                         // Get a random output node
                         let rand_out = io
                             .iter()
                             .enumerate()
-                            .filter(|x| matches!(x.1, NodeType::Output(_)))
+                            .filter(|x| *x.1 == NodeType::Output)
                             .choose(&mut thread_rng())
                             .expect("No Output Nodes");
 
@@ -71,7 +70,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
     // D: Disjoint geanes
     // W: Weight diffrence between avraged
     // N: Geanes in the larger genome (normalised)
-    pub fn distance(&self, trainer: Arc<Trainer<S, O>>, other: &Self) -> f32 {
+    pub fn distance(&self, trainer: Arc<Trainer>, other: &Self) -> f32 {
         // Gets all the innovations numbers of the 'other' geanome
         let other_innovations = other.genes.iter().map(|x| x.innovation).collect::<Vec<_>>();
         let self_innovations = self.genes.iter().map(|x| x.innovation).collect::<Vec<_>>();
@@ -163,8 +162,8 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
 
         for (i, e) in remaining_nodes.iter().enumerate() {
             match e {
-                NodeType::Sensor(_) => out.push(format!(r#"unused-{}("{:?}")"#, i, e)),
-                NodeType::Output(_) => out.push(format!(r#"unused-{}["{:?}"]"#, i, e)),
+                NodeType::Sensor => out.push(format!(r#"unused-{}("{:?}")"#, i, e)),
+                NodeType::Output => out.push(format!(r#"unused-{}["{:?}"]"#, i, e)),
                 _ => panic!(),
             }
         }
@@ -190,7 +189,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
             .nodes
             .iter()
             .enumerate()
-            .filter(|(_, x)| matches!(x, NodeType::Sensor(_)))
+            .filter(|(_, x)| **x == NodeType::Sensor)
         {
             let mut seen_nodes = BitVec::<usize, Lsb0>::new();
             seen_nodes.extend([false].repeat(self.nodes.len()));
@@ -207,7 +206,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
 
     pub fn mutate(
         &self,
-        trainer: Arc<Trainer<S, O>>,
+        trainer: Arc<Trainer>,
         past_mutations: &mut Vec<(usize, (usize, usize))>,
     ) -> Self {
         let mut rng = thread_rng();
@@ -242,8 +241,8 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
                 // not the other way around and the connection would not make a recursive connection
                 if a == b
                     || this.genes.iter().any(|x| x.connects(a, b))
-                    || matches!(this.nodes[a], NodeType::Output(_))
-                    || matches!(this.nodes[b], NodeType::Sensor(_))
+                    || this.nodes[a] == NodeType::Output
+                    || this.nodes[b] == NodeType::Sensor
                     || this.would_be_recursive(a, b)
                 {
                     continue;
@@ -356,15 +355,13 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         }
     }
 
-    pub fn simulate(&self, sensors: &HashMap<S, f32>) -> HashMap<O, f32> {
-        let mut out = HashMap::new();
+    pub fn simulate(&self, sensors: &[f32]) -> Vec<f32> {
+        let mut out = Vec::new();
         let node_tester = Rc::new(NodeTester::from_genome(self, sensors));
 
         for (i, e) in self.nodes.iter().enumerate() {
             match e {
-                NodeType::Output(o) => {
-                    out.insert(o.clone(), node_tester.clone().prop(i));
-                }
+                NodeType::Output => out.push(node_tester.clone().prop(i)),
                 _ => continue,
             }
         }
@@ -374,18 +371,15 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
 }
 
 impl NodeTester {
-    fn from_genome<S: Clone + Eq + Hash, O: Clone>(
-        genome: &Genome<S, O>,
-        sensors: &HashMap<S, f32>,
-    ) -> Self {
+    fn from_genome(genome: &Genome, sensors: &[f32]) -> Self {
         Self {
             nodes: genome
                 .nodes
                 .iter()
-                .cloned()
-                .map(|x| {
+                .enumerate()
+                .map(|(i, x)| {
                     RefCell::new(match x {
-                        NodeType::Sensor(ref s) => Some(*sensors.get(s).unwrap()),
+                        NodeType::Sensor => Some(sensors[i]),
                         _ => None,
                     })
                 })
