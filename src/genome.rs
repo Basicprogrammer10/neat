@@ -119,11 +119,15 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
             .iter()
             .filter(|x| matching_innovations.contains(&x.innovation))
             .map(|x| x.weight);
-        let w = self_matching_weight
+        let mut w = self_matching_weight
             .zip(other_matching_weight)
             .map(|(a, b)| (a - b).abs())
             .sum::<f32>()
             / matching_innovations.len() as f32;
+        // Furthure Research Needed
+        if w.is_nan() {
+            w = 1.0;
+        }
 
         // Distance Equastion
         let c1 = trainer.config.excess_comp;

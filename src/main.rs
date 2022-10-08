@@ -17,9 +17,21 @@ fn main() {
         NodeType::Output(Output),
     ]);
 
-    let mut map = HashMap::new();
-    map.insert(Sensor::A, 1.0);
-    map.insert(Sensor::B, 1.0);
+    let species = trainer.clone().species_categorize();
+    dbg!(species);
+
+    for i in trainer.agents.write().iter_mut() {
+        for _ in 0..100 {
+            *i = i.mutate(trainer.clone());
+        }
+    }
+
+    let species = trainer.clone().species_categorize();
+    dbg!(species);
+
+    // let mut map = HashMap::new();
+    // map.insert(Sensor::A, 1.0);
+    // map.insert(Sensor::B, 1.0);
 
     // for i in trainer.agents.read().iter() {
     //     println!("graph TD\n{}", i.debug());
@@ -39,27 +51,27 @@ fn main() {
     //     println!("> {}\n", i.simulate(map).get(&Output).unwrap());
     // }
 
-    let agents = trainer.agents.read();
-    let a = agents.get(0).unwrap();
-    let mut b = a.to_owned();
-    for _ in 0..100 {
-        b = b.mutate(trainer.clone());
-    }
-    println!("A\n===\n{}\n", a.debug());
-    println!("B\n===\n{}\n", b.debug());
-    println!("Distance: {}", a.distance(trainer.clone(), &b));
+    // let agents = trainer.agents.read();
+    // let a = agents.get(0).unwrap();
+    // let mut b = a.to_owned();
+    // for _ in 0..100 {
+    //     b = b.mutate(trainer.clone());
+    // }
+    // println!("A\n===\n{}\n", a.debug());
+    // println!("B\n===\n{}\n", b.debug());
+    // println!("Distance: {}", a.distance(trainer.clone(), &b));
 
-    let mut times = Vec::new();
-    for _ in 0..1_000_000 {
-        let start = SystemTime::now();
-        b.simulate(&map);
-        let time = start.elapsed().unwrap().as_nanos();
-        times.push(time);
-    }
-    println!(
-        "SIM AVG Time: {}ns",
-        times.iter().sum::<u128>() as f32 / times.len() as f32
-    );
+    // let mut times = Vec::new();
+    // for _ in 0..1_000_000 {
+    //     let start = SystemTime::now();
+    //     b.simulate(&map);
+    //     let time = start.elapsed().unwrap().as_nanos();
+    //     times.push(time);
+    // }
+    // println!(
+    //     "SIM AVG Time: {}ns",
+    //     times.iter().sum::<u128>() as f32 / times.len() as f32
+    // );
 
     // Simulate
     // for (i, e) in trainer.agents.read().iter().enumerate() {
