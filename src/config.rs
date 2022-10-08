@@ -3,9 +3,11 @@ pub struct Config {
     /// The size of the population
     pub population_size: usize,
 
-    // == POPULATION INIT ==
+    // == POPULATION  ==
     /// The chance of a node to have an edge on population init
     pub init_edge_chance: f32,
+    /// Percent of the popluation to eggstermanate before repopulation
+    pub population_kill_percent: f32,
 
     // == COMPATIBILITY COEFFICIENTS ==
     pub excess_comp: f32,
@@ -34,6 +36,7 @@ impl Default for Config {
         Self {
             population_size: 150,
             init_edge_chance: 0.75,
+            population_kill_percent: 0.20,
             excess_comp: 1.0,
             disjoint_comp: 1.0,
             weight_comp: 0.4,

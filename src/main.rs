@@ -1,12 +1,12 @@
-use std::collections::HashMap;
+use std::fmt::Debug;
 use std::sync::Arc;
+use std::{collections::HashMap, hash::Hash};
 
 mod config;
 mod genome;
 mod misc;
 mod trainer;
-use genome::NodeType;
-use misc::sigmoid;
+use genome::{Genome, NodeType};
 
 use crate::trainer::Trainer;
 
@@ -18,35 +18,32 @@ fn main() {
         NodeType::Output(Output),
     ]);
 
-    let species = trainer.clone().species_categorize();
-    dbg!(species);
+    for gen in 0..200 {
+        let species = trainer.clone().species_categorize();
+        let fitness = trainer.species_fitness(&species, &trainer.fitness(fit));
 
-    for _ in 0..100 {
+        trainer.repopulate(&fitness);
         trainer.clone().mutate_population();
-    }
 
-    let species = trainer.clone().species_categorize();
-    'l: for (i1, e1) in species.iter().rev().enumerate() {
-        for (i2, e2) in species.iter().enumerate() {
-            if e1 != e2 && i1 != i2 {
-                let agents = trainer.agents.read();
-                let genome1 = agents.get(i1).unwrap();
-                let genome2 = agents.get(i2).unwrap();
-                println!("A\n===\n{}\n", genome1.debug());
-                println!("B\n===\n{}\n", genome2.debug());
-                println!(
-                    "C\n===\n{}\n",
-                    genome1.crossover(genome2, (0.0, 1.0)).debug()
-                );
-                break 'l;
-            }
-        }
+        let maxfit = fitness.iter().fold(f32::MIN, |x, i| x.max(*i));
+        println!("[*] GEN: {gen} MAXFIT: {maxfit}")
     }
 }
 
-fn fitness(out: HashMap<Output, f32>) -> f32 {
-    let raw = out.get(&Output).unwrap();
-    sigmoid((1. - raw).abs()) //.powf(2.)
+fn fit(_: usize, g: &Genome<Sensor, Output>) -> f32 {
+    let mut sum = 0.0;
+    let mut map = HashMap::new();
+
+    for i in [[false, false], [false, true], [true, false], [true, true]] {
+        map.insert(Sensor::A, i[0] as usize as f32);
+        map.insert(Sensor::B, i[1] as usize as f32);
+
+        let real = (i[0] ^ i[1]) as usize as f32;
+        let got = *g.simulate(&map).get(&Output).unwrap();
+        sum += (real - got).abs();
+    }
+
+    4.0 - sum
 }
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]

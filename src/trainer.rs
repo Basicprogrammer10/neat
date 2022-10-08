@@ -16,6 +16,7 @@ use crate::{config::Config, genome::Genome};
 pub struct Trainer<S: Clone + Eq + Hash + Debug, O: Clone + Debug> {
     // == GENOME ==
     pub agents: RwLock<Vec<Genome<S, O>>>,
+    /// Species ID, Case 0 Genome
     pub species: RwLock<Vec<(usize, Genome<S, O>)>>,
     innovation: AtomicUsize,
 
@@ -80,16 +81,25 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Trainer<S, O> {
         out
     }
 
-    /// Modifies a genome's fitness by the population of its spesies
-    pub fn species_fitness(self: Arc<Self>, fitness: &[f32]) -> Vec<f32> {
+    pub fn fitness(&self, fitness: impl Fn(usize, &Genome<S, O>) -> f32) -> Vec<f32> {
         let agents = self.agents.borrow().read();
-        let species = self.species.read();
+        agents
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (fitness)(i, e))
+            .collect::<Vec<_>>()
+    }
+
+    /// Modifies a genome's fitness by the population of its spesies
+    pub fn species_fitness(&self, species: &[usize], fitness: &[f32]) -> Vec<f32> {
+        let agents = self.agents.borrow().read();
         let mut out = vec![0.0; agents.len()];
 
         // nf = f / [count of genomes in the same spesies]
         for (i, e) in fitness.iter().enumerate() {
-            let this_species = species.get(i).unwrap().0;
-            let count = species.iter().filter(|x| x.0 == this_species).count();
+            // let this_species = species.get(i).unwrap().0;
+            let this_species = species[i];
+            let count = species.iter().filter(|x| **x == this_species).count();
             out[i] = fitness[i] / count as f32;
         }
 
@@ -104,4 +114,51 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Trainer<S, O> {
             *i = i.mutate(self.clone(), &mut mutations);
         }
     }
+
+    // Removes the worst performing genomes
+    pub fn execute(&self, fitness: &[f32]) {
+        let mut agents = self.agents.write();
+        let to_remove = (agents.len() as f32 * self.config.population_kill_percent) as usize;
+        let mut agent_fitness = fitness.iter().enumerate().collect::<Vec<_>>();
+        agent_fitness.sort_by(|a, b| a.1.partial_cmp(b.1).unwrap());
+
+        for (remove_index, (agent_index, _)) in agent_fitness.iter().take(to_remove).enumerate() {
+            agents.remove(agent_index - remove_index);
+        }
+    }
+
+    pub fn repopulate(&self, fitness: &[f32]) {
+        let mut rng = thread_rng();
+        let mut agents = self.agents.write();
+        let mut new_agents = Vec::new();
+        assert!(agents.len() > 1);
+
+        while agents.len() + new_agents.len() < self.config.population_size {
+            let i1 = rng.gen_range(0..agents.len());
+            let i2 = rng.gen_range(0..agents.len());
+            let g1 = &agents[i1];
+            let g2 = &agents[i2];
+
+            if i1 == i2 {
+                continue;
+            }
+
+            new_agents.push(g1.crossover(g2, (fitness[i1], fitness[i2])));
+        }
+
+        agents.extend(new_agents);
+    }
 }
+
+// fn get_pairs(&self) -> Vec<(Genome<S, O>, Genome<S, O>)> {
+//     let mut agents = self.agents.read().to_vec();
+//     let mut out = Vec::new();
+
+//     while agents.len() > 1 {
+//         let i1 = agents.remove(thread_rng().gen_range(0..agents.len()));
+//         let i2 = agents.remove(thread_rng().gen_range(0..agents.len()));
+//         out.push((i1, i2));
+//     }
+
+//     out
+// }
