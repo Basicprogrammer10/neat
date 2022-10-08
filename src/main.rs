@@ -1,4 +1,5 @@
-use std::{collections::HashMap, sync::Arc, time::SystemTime};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 mod config;
 mod genome;
@@ -20,63 +21,27 @@ fn main() {
     let species = trainer.clone().species_categorize();
     dbg!(species);
 
-    for i in trainer.agents.write().iter_mut() {
-        for _ in 0..100 {
-            *i = i.mutate(trainer.clone());
-        }
+    for _ in 0..100 {
+        trainer.clone().mutate_population();
     }
 
     let species = trainer.clone().species_categorize();
-    dbg!(species);
-
-    // let mut map = HashMap::new();
-    // map.insert(Sensor::A, 1.0);
-    // map.insert(Sensor::B, 1.0);
-
-    // for i in trainer.agents.read().iter() {
-    //     println!("graph TD\n{}", i.debug());
-
-    //     let mut i = i.mutate(trainer.clone());
-    //     for j in 0..100 {
-    //         i = i.mutate(trainer.clone());
-    //     }
-
-    //     println!("graph TD\n{}", i.debug());
-
-    //     let mut map = HashMap::new();
-    //     map.insert(Sensor::A, 1.0);
-    //     map.insert(Sensor::B, 1.0);
-
-    //     println!("SIMULATION");
-    //     println!("> {}\n", i.simulate(map).get(&Output).unwrap());
-    // }
-
-    // let agents = trainer.agents.read();
-    // let a = agents.get(0).unwrap();
-    // let mut b = a.to_owned();
-    // for _ in 0..100 {
-    //     b = b.mutate(trainer.clone());
-    // }
-    // println!("A\n===\n{}\n", a.debug());
-    // println!("B\n===\n{}\n", b.debug());
-    // println!("Distance: {}", a.distance(trainer.clone(), &b));
-
-    // let mut times = Vec::new();
-    // for _ in 0..1_000_000 {
-    //     let start = SystemTime::now();
-    //     b.simulate(&map);
-    //     let time = start.elapsed().unwrap().as_nanos();
-    //     times.push(time);
-    // }
-    // println!(
-    //     "SIM AVG Time: {}ns",
-    //     times.iter().sum::<u128>() as f32 / times.len() as f32
-    // );
-
-    // Simulate
-    // for (i, e) in trainer.agents.read().iter().enumerate() {
-    //     println!("#{} {}", i, e.simulate(map.clone()).get(&Output).unwrap());
-    // }
+    'l: for (i1, e1) in species.iter().rev().enumerate() {
+        for (i2, e2) in species.iter().enumerate() {
+            if e1 != e2 && i1 != i2 {
+                let agents = trainer.agents.read();
+                let genome1 = agents.get(i1).unwrap();
+                let genome2 = agents.get(i2).unwrap();
+                println!("A\n===\n{}\n", genome1.debug());
+                println!("B\n===\n{}\n", genome2.debug());
+                println!(
+                    "C\n===\n{}\n",
+                    genome1.crossover(genome2, (0.0, 1.0)).debug()
+                );
+                break 'l;
+            }
+        }
+    }
 }
 
 fn fitness(out: HashMap<Output, f32>) -> f32 {
@@ -110,12 +75,17 @@ struct Output;
       * Edge additions: A new edge with a random weight is added between two unconnected nodes
 - Crossover
     - Matching neanes are randomly selected from each parent whule the extra geanes are pulled from the more fit parent
-    - The distance function says that `distance = (E * c1 / N) + (D * c2 / N) + c3 * <AVG WEIGHT>` where E is the count of excess geanes
+    * The distance function says that `distance = (E * c1 / N) + (D * c2 / N) + c3 * <AVG WEIGHT>` where E is the count of excess geanes
       D is the count of disjoint geanes N is the count of geanes in the larger genome and the coeffecents aredefined in a config (Referer to page 109 - 110)
 
 - Selection
 * Debug weird freezes when doing tens of thousands of mutations
 - While less than 15 genes bias add node operation to older genes
+- When repopulating, remove the worse proforming genomes first. Then crossover.
+- Look into nuron bias
+- Past mutations
+- Make system work with inout node counts not vecs of them
+- Dont store nodes as real objects just counts?
 */
 
 // TEST GENOME

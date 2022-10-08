@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::{
@@ -13,9 +14,12 @@ use crate::genome::NodeType;
 use crate::{config::Config, genome::Genome};
 
 pub struct Trainer<S: Clone + Eq + Hash + Debug, O: Clone + Debug> {
+    // == GENOME ==
     pub agents: RwLock<Vec<Genome<S, O>>>,
     pub species: RwLock<Vec<(usize, Genome<S, O>)>>,
     innovation: AtomicUsize,
+
+    // == SIMULATION ==
     pub config: Config,
 }
 
@@ -66,7 +70,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Trainer<S, O> {
             out[gnome_index] = new_index;
         }
 
-        // Prune species
+        // Prune unused species
         for e in species.clone().iter() {
             if !out.contains(&e.0) {
                 species.retain(|x| x.0 != e.0);
@@ -74,5 +78,30 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Trainer<S, O> {
         }
 
         out
+    }
+
+    /// Modifies a genome's fitness by the population of its spesies
+    pub fn species_fitness(self: Arc<Self>, fitness: &[f32]) -> Vec<f32> {
+        let agents = self.agents.borrow().read();
+        let species = self.species.read();
+        let mut out = vec![0.0; agents.len()];
+
+        // nf = f / [count of genomes in the same spesies]
+        for (i, e) in fitness.iter().enumerate() {
+            let this_species = species.get(i).unwrap().0;
+            let count = species.iter().filter(|x| x.0 == this_species).count();
+            out[i] = fitness[i] / count as f32;
+        }
+
+        out
+    }
+
+    pub fn mutate_population(self: Arc<Self>) {
+        let mut agents = self.agents.write();
+        let mut mutations = Vec::new();
+
+        for i in agents.iter_mut() {
+            *i = i.mutate(self.clone(), &mut mutations);
+        }
     }
 }

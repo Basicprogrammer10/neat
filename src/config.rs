@@ -24,6 +24,8 @@ pub struct Config {
     pub mutate_add_edge: f32,
     /// The number of attempts to make on creating a new edge
     pub mutate_add_edge_tries: usize,
+    /// The chance to disable an edge
+    pub mutate_disable_edge: f32,
 }
 
 // Default values stolen from the NEAT paper
@@ -41,6 +43,7 @@ impl Default for Config {
             mutate_add_node: 0.03,
             mutate_add_edge: 0.05,
             mutate_add_edge_tries: 20,
+            mutate_disable_edge: 0.0,
         }
     }
 }

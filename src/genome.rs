@@ -126,7 +126,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
             / matching_innovations.len() as f32;
         // Furthure Research Needed
         if w.is_nan() {
-            w = 1.0;
+            w = 0.0;
         }
 
         // Distance Equastion
@@ -205,19 +205,27 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         false
     }
 
-    pub fn mutate(&self, trainer: Arc<Trainer<S, O>>) -> Self {
+    pub fn mutate(
+        &self,
+        trainer: Arc<Trainer<S, O>>,
+        past_mutations: &mut Vec<(usize, (usize, usize))>,
+    ) -> Self {
         let mut rng = thread_rng();
         let mut this = self.clone();
         let nodes = this.nodes.len();
 
         // Mutate Weights
-        for i in &mut this.genes {
+        for i in this.genes.iter_mut().filter(|x| x.enabled) {
             if rng.gen_bool(trainer.config.mutate_weight.into()) {
                 if rng.gen_bool(trainer.config.mutate_weight.into()) {
                     i.weight = rng.gen_range(-1f32..=1f32);
                     continue;
                 }
                 i.weight *= rng.gen::<f32>()
+            }
+
+            if rng.gen_bool(trainer.config.mutate_disable_edge.into()) {
+                i.enabled = false;
             }
         }
 
@@ -274,6 +282,80 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         this
     }
 
+    pub fn crossover(&self, other: &Self, fitness: (f32, f32)) -> Self {
+        let mut rng = thread_rng();
+        let mut genes = Vec::new();
+        let mut nodes = Vec::new();
+
+        for i in self.nodes.iter().chain(other.nodes.iter()) {
+            if !nodes.contains(&i) || matches!(i, NodeType::Hidden) {
+                nodes.push(i);
+            }
+        }
+
+        let mut self_i = 0;
+        let mut other_i = 0;
+        let mut self_last = 0;
+        let mut other_last = 0;
+
+        while self_i < self.genes.len() && other_i < other.genes.len() {
+            let self_innovation = self.genes[self_i].innovation;
+            let other_innovation = other.genes[other_i].innovation;
+
+            if self_innovation < other_innovation {
+                self_i += 1;
+                continue;
+            }
+
+            if self_innovation > other_innovation {
+                other_i += 1;
+                continue;
+            }
+
+            if fitness.0 > fitness.1 {
+                genes.extend(self.genes[self_last..self_i].iter());
+            } else if fitness.1 > fitness.0 {
+                genes.extend(other.genes[other_last..other_i].iter());
+            } else {
+                if rng.gen_bool(0.5) {
+                    genes.extend(self.genes[self_last..self_i].iter());
+                } else {
+                    genes.extend(other.genes[other_last..other_i].iter());
+                }
+            }
+
+            if rng.gen_bool(0.5) {
+                genes.push(&self.genes[self_i]);
+            } else {
+                genes.push(&other.genes[other_i]);
+            }
+
+            self_i += 1;
+            other_i += 1;
+            self_last = self_i;
+            other_last = other_i;
+        }
+
+        if self.genes.len() > other.genes.len() {
+            genes.extend(self.genes[self_last..].iter());
+        } else if self.genes.len() < other.genes.len() {
+            genes.extend(other.genes[other_last..].iter());
+        } else if fitness.0 > fitness.1 {
+            genes.extend(self.genes[self_last..].iter());
+        } else if fitness.1 > fitness.0 {
+            genes.extend(other.genes[other_last..].iter());
+        } else if rng.gen_bool(0.5) {
+            genes.extend(self.genes[self_last..].iter());
+        } else {
+            genes.extend(other.genes[other_last..].iter());
+        }
+
+        Genome {
+            nodes: nodes.into_iter().cloned().collect(),
+            genes: genes.into_iter().cloned().collect(),
+        }
+    }
+
     pub fn simulate(&self, sensors: &HashMap<S, f32>) -> HashMap<O, f32> {
         let mut out = HashMap::new();
         let node_tester = Rc::new(NodeTester::from_genome(self, sensors));
@@ -281,7 +363,7 @@ impl<S: Clone + Eq + Hash + Debug, O: Clone + Eq + Hash + Debug> Genome<S, O> {
         for (i, e) in self.nodes.iter().enumerate() {
             match e {
                 NodeType::Output(o) => {
-                    out.insert(o.clone(), sigmoid(node_tester.clone().prop(i)));
+                    out.insert(o.clone(), node_tester.clone().prop(i));
                 }
                 _ => continue,
             }
@@ -328,7 +410,7 @@ impl NodeTester {
             out += val * i.weight;
         }
 
-        out
+        sigmoid(out)
     }
 }
 
