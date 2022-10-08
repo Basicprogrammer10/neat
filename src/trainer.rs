@@ -37,11 +37,13 @@ impl Trainer {
         }
     }
 
-    pub fn new_innovation(&self) -> usize {
+    pub(crate) fn new_innovation(&self) -> usize {
         self.innovation.fetch_add(1, Ordering::AcqRel)
     }
 
-    pub fn populate(self: Arc<Self>) {
+    /// Create the innitial population
+    pub fn populate(self: Arc<Self>) -> Arc<Self> {
+        let return_self = self.clone();
         let mut agents = self.agents.write();
         let mut base_nodes = Vec::with_capacity(self.inputs + self.outputs);
         base_nodes.extend([NodeType::Sensor].repeat(self.inputs));
@@ -50,42 +52,41 @@ impl Trainer {
         for _ in agents.len()..self.config.population_size {
             agents.push(Genome::new(self.clone(), base_nodes.clone()))
         }
+
+        return_self
     }
 
-    pub fn species_categorize(self: Arc<Self>) -> Vec<usize> {
+    pub fn species_categorize(&self) {
         let mut rng = thread_rng();
-        let working = self.agents.borrow().read().clone();
-        let mut working = working.iter().enumerate().collect::<Vec<_>>();
+        let mut agents = self.agents.borrow().write();
         let mut species = self.species.borrow().write();
-        let mut out = vec![0; working.len()];
+        let mut working = agents.clone();
+        let mut used_species = Vec::new();
 
         'l: while working.len() > 0 {
             // Get and remove random genome
-            let (gnome_index, genome) = working.remove(rng.gen_range(0..working.len()));
+            let genome_index = rng.gen_range(0..working.len());
+            let genome = working.remove(genome_index);
 
             // Compare it to every current species
             for x in species.iter() {
-                let distance = x.1.distance(self.clone(), &genome);
+                let distance = x.1.distance(&genome);
                 if distance < self.config.compatibility_threshold {
-                    out[gnome_index] = x.0;
+                    agents[genome_index].species = Some(x.0);
+                    used_species.push(x.0);
                     continue 'l;
                 }
             }
 
-            // Create a new speciesf
+            // Create a new species
             let new_index = species.last().map(|x| x.0 + 1).unwrap_or(0);
             species.push((new_index, genome.clone()));
-            out[gnome_index] = new_index;
+            agents[genome_index].species = Some(new_index);
+            used_species.push(new_index);
         }
 
         // Prune unused species
-        for e in species.clone().iter() {
-            if !out.contains(&e.0) {
-                species.retain(|x| x.0 != e.0);
-            }
-        }
-
-        out
+        species.retain(|x| used_species.contains(&x.0));
     }
 
     pub fn fitness(&self, fitness: impl Fn(usize, &Genome) -> f32) -> Vec<f32> {
@@ -98,40 +99,42 @@ impl Trainer {
     }
 
     /// Modifies a genome's fitness by the population of its spesies
-    pub fn species_fitness(&self, species: &[usize], fitness: &[f32]) -> Vec<f32> {
+    pub fn species_fitness(&self, fitness: &[f32]) -> Vec<f32> {
         let agents = self.agents.borrow().read();
-        let mut out = vec![0.0; agents.len()];
+        let mut out = Vec::with_capacity(agents.len());
 
         // nf = f / [count of genomes in the same spesies]
         for (i, e) in fitness.iter().enumerate() {
-            // let this_species = species.get(i).unwrap().0;
-            let this_species = species[i];
-            let count = species.iter().filter(|x| **x == this_species).count();
-            out[i] = fitness[i] / count as f32;
+            let this_species = agents[i].species;
+            let count = agents.iter().filter(|x| x.species == this_species).count();
+            out.push(e / count as f32);
         }
 
         out
     }
 
-    pub fn mutate_population(self: Arc<Self>) {
+    pub fn mutate_population(&self) {
         let mut agents = self.agents.write();
         let mut mutations = Vec::new();
 
         for i in agents.iter_mut() {
-            *i = i.mutate(self.clone(), &mut mutations);
+            *i = i.mutate(&mut mutations);
         }
     }
 
     // Removes the worst performing genomes
     pub fn execute(&self, fitness: &[f32]) {
         let mut agents = self.agents.write();
-        let to_remove = (agents.len() as f32 * self.config.population_kill_percent) as usize;
+        let remove_count = (agents.len() as f32 * self.config.population_kill_percent) as usize;
         let mut agent_fitness = fitness.iter().enumerate().collect::<Vec<_>>();
         agent_fitness.sort_by(|a, b| a.1.partial_cmp(b.1).unwrap());
+        let to_remove = agent_fitness
+            .iter()
+            .take(remove_count)
+            .map(|x| agents[x.0].id)
+            .collect::<Vec<_>>();
 
-        for (remove_index, (agent_index, _)) in agent_fitness.iter().take(to_remove).enumerate() {
-            agents.remove(agent_index - remove_index);
-        }
+        agents.retain(|x| !to_remove.contains(&x.id));
     }
 
     pub fn repopulate(&self, fitness: &[f32]) {

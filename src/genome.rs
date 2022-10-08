@@ -14,11 +14,14 @@ use crate::{
 
 #[derive(Clone)]
 pub struct Genome {
+    trainer: Arc<Trainer>,
+    pub id: usize,
+    pub species: Option<usize>,
     pub nodes: Vec<NodeType>,
     pub genes: Vec<Gene>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Gene {
     pub node_in: usize,
     pub node_out: usize,
@@ -62,7 +65,13 @@ impl Genome {
                 _ => continue,
             }
         }
-        Self { nodes: io, genes }
+        Self {
+            id: trainer.new_innovation(),
+            species: None,
+            trainer,
+            nodes: io,
+            genes,
+        }
     }
 
     // δ = (c1 * E / N) + (c2 * D / N) + c3 * W
@@ -70,7 +79,7 @@ impl Genome {
     // D: Disjoint geanes
     // W: Weight diffrence between avraged
     // N: Geanes in the larger genome (normalised)
-    pub fn distance(&self, trainer: Arc<Trainer>, other: &Self) -> f32 {
+    pub fn distance(&self, other: &Self) -> f32 {
         // Gets all the innovations numbers of the 'other' geanome
         let other_innovations = other.genes.iter().map(|x| x.innovation).collect::<Vec<_>>();
         let self_innovations = self.genes.iter().map(|x| x.innovation).collect::<Vec<_>>();
@@ -129,9 +138,9 @@ impl Genome {
         }
 
         // Distance Equastion
-        let c1 = trainer.config.excess_comp;
-        let c2 = trainer.config.disjoint_comp;
-        let c3 = trainer.config.weight_comp;
+        let c1 = self.trainer.config.excess_comp;
+        let c2 = self.trainer.config.disjoint_comp;
+        let c3 = self.trainer.config.weight_comp;
         let n = n as f32;
 
         (c1 * e as f32 / n) + (c2 * d as f32 / n) + c3 * w as f32
@@ -204,33 +213,29 @@ impl Genome {
         false
     }
 
-    pub fn mutate(
-        &self,
-        trainer: Arc<Trainer>,
-        past_mutations: &mut Vec<(usize, (usize, usize))>,
-    ) -> Self {
+    pub fn mutate(&self, past_mutations: &mut Vec<(usize, (usize, usize))>) -> Self {
         let mut rng = thread_rng();
         let mut this = self.clone();
         let nodes = this.nodes.len();
 
         // Mutate Weights
         for i in this.genes.iter_mut().filter(|x| x.enabled) {
-            if rng.gen_bool(trainer.config.mutate_weight.into()) {
-                if rng.gen_bool(trainer.config.mutate_weight.into()) {
+            if rng.gen_bool(self.trainer.config.mutate_weight.into()) {
+                if rng.gen_bool(self.trainer.config.mutate_weight.into()) {
                     i.weight = rng.gen_range(-1f32..=1f32);
                     continue;
                 }
                 i.weight *= rng.gen::<f32>()
             }
 
-            if rng.gen_bool(trainer.config.mutate_disable_edge.into()) {
+            if rng.gen_bool(self.trainer.config.mutate_disable_edge.into()) {
                 i.enabled = false;
             }
         }
 
         // Add Edge
-        if rng.gen_bool(trainer.config.mutate_add_edge.into()) {
-            for _ in 0..trainer.config.mutate_add_edge_tries {
+        if rng.gen_bool(self.trainer.config.mutate_add_edge.into()) {
+            for _ in 0..self.trainer.config.mutate_add_edge_tries {
                 // Genarate Indexes
 
                 let a = rng.gen_range(0..nodes);
@@ -249,13 +254,13 @@ impl Genome {
                 }
 
                 this.genes
-                    .push(Gene::random(trainer.new_innovation(), a, b));
+                    .push(Gene::random(self.trainer.new_innovation(), a, b));
                 break;
             }
         }
 
         // Add Node
-        if !this.genes.is_empty() && rng.gen_bool(trainer.config.mutate_add_node.into()) {
+        if !this.genes.is_empty() && rng.gen_bool(self.trainer.config.mutate_add_node.into()) {
             let gene = this
                 .genes
                 .iter_mut()
@@ -272,10 +277,13 @@ impl Genome {
                 node_out: nodes,
                 weight: 1.0,
                 enabled: true,
-                innovation: trainer.new_innovation(),
+                innovation: self.trainer.new_innovation(),
             });
-            this.genes
-                .push(Gene::random(trainer.new_innovation(), nodes, old_node_to));
+            this.genes.push(Gene::random(
+                self.trainer.new_innovation(),
+                nodes,
+                old_node_to,
+            ));
         }
 
         this
@@ -350,6 +358,9 @@ impl Genome {
         }
 
         Genome {
+            trainer: self.trainer.clone(),
+            id: self.trainer.new_innovation(),
+            species: None,
             nodes: nodes.into_iter().cloned().collect(),
             genes: genes.into_iter().cloned().collect(),
         }
@@ -427,7 +438,7 @@ impl Gene {
 fn is_recursive_checker(seen_nodes: Rc<RefCell<BitVec>>, genes: &[Gene], index: usize) -> bool {
     let nodes = seen_nodes.clone();
     for i in genes.iter().filter(|x| x.enabled && x.node_in == index) {
-        let seen = *nodes.borrow().get(i.node_out).unwrap();
+        let seen = nodes.borrow()[i.node_out];
         nodes.borrow_mut().set(i.node_out, true);
         if seen || is_recursive_checker(seen_nodes.clone(), genes, i.node_out) {
             return true;

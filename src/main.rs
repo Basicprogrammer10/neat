@@ -9,21 +9,26 @@ use genome::Genome;
 use crate::trainer::Trainer;
 
 fn main() {
-    let trainer = Arc::new(Trainer::new(2, 1));
-    trainer.clone().populate();
+    // Create a new trainer with 2 inputs and 1 output
+    // Then populate it
+    let trainer = Arc::new(Trainer::new(2, 1)).populate();
 
-    for gen in 0..200 {
-        let species = trainer.clone().species_categorize();
-        let fitness = trainer.species_fitness(&species, &trainer.fitness(fit));
+    // Evolve for 200 genarations
+    for gen in 1..=200 {
+        // Catagorize the species
+        trainer.species_categorize();
+        let fitness = trainer.species_fitness(&trainer.fitness(fit));
 
+        trainer.execute(&fitness);
         trainer.repopulate(&fitness);
-        trainer.clone().mutate_population();
+        trainer.mutate_population();
 
         let maxfit = fitness.iter().fold(f32::MIN, |x, i| x.max(*i));
-        println!("[*] GEN: {gen} MAXFIT: {maxfit}")
+        println!("[*] GEN: {gen} | MAXFIT: {maxfit:.2}")
     }
 }
 
+// Define an XoR fitness function
 fn fit(_: usize, g: &Genome) -> f32 {
     let mut sum = 0.0;
 
@@ -53,27 +58,16 @@ fn fit(_: usize, g: &Genome) -> f32 {
         inhearits the old edges weight. The new geanes each net new innovations numbers.
       * Edge additions: A new edge with a random weight is added between two unconnected nodes
 - Crossover
-    - Matching neanes are randomly selected from each parent whule the extra geanes are pulled from the more fit parent
+    * Matching neanes are randomly selected from each parent whule the extra geanes are pulled from the more fit parent
     * The distance function says that `distance = (E * c1 / N) + (D * c2 / N) + c3 * <AVG WEIGHT>` where E is the count of excess geanes
       D is the count of disjoint geanes N is the count of geanes in the larger genome and the coeffecents aredefined in a config (Referer to page 109 - 110)
 
-- Selection
+* Selection
 * Debug weird freezes when doing tens of thousands of mutations
 - While less than 15 genes bias add node operation to older genes
 - When repopulating, remove the worse proforming genomes first. Then crossover.
 - Look into nuron bias
 - Past mutations
-- Make system work with inout node counts not vecs of them
+* Make system work with inout node counts not vecs of them
 - Dont store nodes as real objects just counts?
 */
-
-// TEST GENOME
-// let genome = Genome::<Sensor, Output> {
-//     nodes: vec![
-//         NodeType::Sensor(Sensor::A),
-//         NodeType::Sensor(Sensor::B),
-//         NodeType::Hidden,
-//         NodeType::Output(Output),
-//     ],
-//     genes: vec![bgene(1, 3, 0.7), bgene(0, 2, 0.2), bgene(2, 3, -0.3)],
-// };
