@@ -41,14 +41,19 @@ impl Trainer {
         self.innovation.fetch_add(1, Ordering::AcqRel)
     }
 
+    pub(crate) fn base_nodes(&self) -> Vec<NodeType> {
+        let mut base_nodes = Vec::with_capacity(self.inputs + self.outputs);
+        base_nodes.extend([NodeType::Sensor].repeat(self.inputs));
+        base_nodes.extend([NodeType::Output].repeat(self.outputs));
+        base_nodes
+    }
+
     /// Create the innitial population
     pub fn populate(self: Arc<Self>) -> Arc<Self> {
         let return_self = self.clone();
         let mut agents = self.agents.write();
-        let mut base_nodes = Vec::with_capacity(self.inputs + self.outputs);
-        base_nodes.extend([NodeType::Sensor].repeat(self.inputs));
-        base_nodes.extend([NodeType::Output].repeat(self.outputs));
 
+        let base_nodes = self.base_nodes();
         for _ in agents.len()..self.config.population_size {
             agents.push(Genome::new(self.clone(), base_nodes.clone()))
         }
@@ -160,15 +165,3 @@ impl Trainer {
     }
 }
 
-// fn get_pairs(&self) -> Vec<(Genome<S, O>, Genome<S, O>)> {
-//     let mut agents = self.agents.read().to_vec();
-//     let mut out = Vec::new();
-
-//     while agents.len() > 1 {
-//         let i1 = agents.remove(thread_rng().gen_range(0..agents.len()));
-//         let i2 = agents.remove(thread_rng().gen_range(0..agents.len()));
-//         out.push((i1, i2));
-//     }
-
-//     out
-// }

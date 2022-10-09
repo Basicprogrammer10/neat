@@ -12,20 +12,31 @@ fn main() {
     // Create a new trainer with 2 inputs and 1 output
     // Then populate it
     let trainer = Arc::new(Trainer::new(2, 1)).populate();
+    let mut best = None;
 
     // Evolve for 200 genarations
-    for gen in 1..=200 {
+    for gen in 1..=140 {
         // Catagorize the species
         trainer.species_categorize();
         let fitness = trainer.species_fitness(&trainer.fitness(fit));
+        let maxfit = fitness.iter().fold(f32::MIN, |x, i| x.max(*i));
+        best = Some(
+            trainer.agents.read()[fitness
+                .iter()
+                .enumerate()
+                .find(|x| *x.1 == maxfit)
+                .unwrap()
+                .0]
+                .clone(),
+        );
+        println!("[*] GEN: {gen} | MAXFIT: {maxfit:.2}");
 
         trainer.execute(&fitness);
         trainer.repopulate(&fitness);
         trainer.mutate_population();
-
-        let maxfit = fitness.iter().fold(f32::MIN, |x, i| x.max(*i));
-        println!("[*] GEN: {gen} | MAXFIT: {maxfit:.2}")
     }
+
+    println!("{}", best.unwrap().debug());
 }
 
 // Define an XoR fitness function

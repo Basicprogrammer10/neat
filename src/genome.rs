@@ -294,11 +294,13 @@ impl Genome {
         let mut genes = Vec::new();
         let mut nodes = Vec::new();
 
-        for i in self.nodes.iter().chain(other.nodes.iter()) {
-            if !nodes.contains(&i) || matches!(i, NodeType::Hidden) {
-                nodes.push(i);
-            }
-        }
+        let total_hidden = self
+            .nodes
+            .iter()
+            .chain(other.nodes.iter())
+            .fold(0, |inc, x| inc + (*x == NodeType::Hidden) as usize);
+        nodes.extend(self.trainer.base_nodes());
+        nodes.extend([NodeType::Hidden].repeat(total_hidden));
 
         let mut self_i = 0;
         let mut other_i = 0;
@@ -361,8 +363,8 @@ impl Genome {
             trainer: self.trainer.clone(),
             id: self.trainer.new_innovation(),
             species: None,
-            nodes: nodes.into_iter().cloned().collect(),
             genes: genes.into_iter().cloned().collect(),
+            nodes,
         }
     }
 
