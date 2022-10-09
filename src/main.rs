@@ -46,7 +46,7 @@ fn fit(_: usize, g: &Genome) -> f32 {
     for i in [[false, false], [false, true], [true, false], [true, true]] {
         let inp = [i[0] as usize as f32, i[1] as usize as f32];
         let real = (i[0] ^ i[1]) as usize as f32;
-        println!("==\n{}\n==", g.debug());
+        println!("=={}\n{}\n==", g.is_recursive(), g.debug());
         let got = g.simulate(&inp)[0];
         sum += (real - got).abs();
     }
@@ -82,4 +82,5 @@ fn fit(_: usize, g: &Genome) -> f32 {
 - Past mutations
 * Make system work with inout node counts not vecs of them
 * Dont store nodes as real objects just counts?
+- Fix crossover wackyness
 */

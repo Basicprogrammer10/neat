@@ -1,11 +1,14 @@
-use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::{cell::RefCell, cmp::Ordering};
 
 use bitvec::prelude::Lsb0;
 use bitvec::vec::BitVec;
-use rand::{seq::IteratorRandom, thread_rng, Rng};
+use rand::{
+    seq::{IteratorRandom, SliceRandom},
+    thread_rng, Rng,
+};
 
 use crate::{
     misc::{sigmoid, SignString},
@@ -177,11 +180,7 @@ impl Genome {
         }
 
         for (i, e) in remaining_nodes.iter().enumerate() {
-            match self.classify_node(*e) {
-                NodeType::Sensor => out.push(format!(r#"unused-{}("{:?}")"#, i, e)),
-                NodeType::Output => out.push(format!(r#"unused-{}["{:?}"]"#, i, e)),
-                _ => panic!(),
-            }
+            out.push(format!(r#"unused-{}("{:?}")"#, i, self.classify_node(*e)));
         }
 
         out.join("\n")
@@ -200,7 +199,7 @@ impl Genome {
         new.is_recursive()
     }
 
-    fn is_recursive(&self) -> bool {
+    pub fn is_recursive(&self) -> bool {
         for i in 0..self.trainer.inputs {
             let mut seen_nodes = BitVec::<usize, Lsb0>::repeat(false, self.nodes);
             seen_nodes.set(i, true);
@@ -271,19 +270,19 @@ impl Genome {
             let old_node_to = gene.node_out;
 
             gene.enabled = false;
-            this.nodes += 1;
             this.genes.push(Gene {
                 node_in: old_node_from,
-                node_out: this.nodes - 1,
+                node_out: this.nodes,
                 weight: 1.0,
                 enabled: true,
                 innovation: self.trainer.new_innovation(),
             });
             this.genes.push(Gene::random(
                 self.trainer.new_innovation(),
-                this.nodes - 1,
+                this.nodes,
                 old_node_to,
             ));
+            this.nodes += 1;
         }
 
         this
@@ -293,60 +292,57 @@ impl Genome {
         let mut rng = thread_rng();
         let mut genes = Vec::new();
 
-        let mut self_i = 0;
-        let mut other_i = 0;
+        let mut self_index = 0;
         let mut self_last = 0;
+        let mut other_index = 0;
         let mut other_last = 0;
 
-        while self_i < self.genes.len() && other_i < other.genes.len() {
-            let self_innovation = self.genes[self_i].innovation;
-            let other_innovation = other.genes[other_i].innovation;
+        // Add Matching genes (randomly from each genome)
+        while self_index < self.genes.len() && other_index < other.genes.len() {
+            let self_gene = &self.genes[self_index];
+            let other_gene = &other.genes[other_index];
 
-            if self_innovation < other_innovation {
-                self_i += 1;
-                continue;
+            match self_gene.innovation.cmp(&other_gene.innovation) {
+                Ordering::Greater => other_index += 1,
+                Ordering::Less => self_index += 1,
+                _ => {}
             }
 
-            if self_innovation > other_innovation {
-                other_i += 1;
-                continue;
-            }
+            // If innovations match up
+            // Add disjoint genes
+            genes.extend(match fitness.0.partial_cmp(&fitness.1).unwrap() {
+                Ordering::Equal => [
+                    other.genes[other_last..other_index].iter(),
+                    self.genes[self_last..self_index].iter(),
+                ]
+                .choose(&mut rng)
+                .unwrap()
+                .to_owned(),
+                Ordering::Less => other.genes[other_last..other_index].iter(),
+                Ordering::Greater => self.genes[self_last..self_index].iter(),
+            });
 
-            if fitness.0 > fitness.1 {
-                genes.extend(self.genes[self_last..self_i].iter());
-            } else if fitness.1 > fitness.0 {
-                genes.extend(other.genes[other_last..other_i].iter());
-            } else if rng.gen_bool(0.5) {
-                genes.extend(self.genes[self_last..self_i].iter());
-            } else {
-                genes.extend(other.genes[other_last..other_i].iter());
-            }
+            // Add one of the genes
+            genes.push(*[self_gene, other_gene].choose(&mut rng).unwrap());
 
-            if rng.gen_bool(0.5) {
-                genes.push(&self.genes[self_i]);
-            } else {
-                genes.push(&other.genes[other_i]);
-            }
-
-            self_i += 1;
-            other_i += 1;
-            self_last = self_i;
-            other_last = other_i;
+            self_index += 1;
+            other_index += 1;
+            self_last = self_index;
+            other_last = other_index;
         }
 
-        if self.genes.len() > other.genes.len() {
-            genes.extend(self.genes[self_last..].iter());
-        } else if self.genes.len() < other.genes.len() {
-            genes.extend(other.genes[other_last..].iter());
-        } else if fitness.0 > fitness.1 {
-            genes.extend(self.genes[self_last..].iter());
-        } else if fitness.1 > fitness.0 {
-            genes.extend(other.genes[other_last..].iter());
-        } else if rng.gen_bool(0.5) {
-            genes.extend(self.genes[self_last..].iter());
-        } else {
-            genes.extend(other.genes[other_last..].iter());
-        }
+        // Add Excess genes
+        genes.extend(match fitness.0.partial_cmp(&fitness.1).unwrap() {
+            Ordering::Equal => [
+                other.genes[other_last..].iter(),
+                self.genes[self_last..].iter(),
+            ]
+            .choose(&mut rng)
+            .unwrap()
+            .to_owned(),
+            Ordering::Less => other.genes[other_last..].iter(),
+            Ordering::Greater => self.genes[self_last..].iter(),
+        });
 
         Genome {
             trainer: self.trainer.clone(),

@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::mem;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -139,7 +140,7 @@ impl Trainer {
         let mut new_agents = Vec::new();
         assert!(agents.len() > 1);
 
-        while agents.len() + new_agents.len() < self.config.population_size {
+        while new_agents.len() < self.config.population_size {
             let i1 = rng.gen_range(0..agents.len());
             let i2 = rng.gen_range(0..agents.len());
             let g1 = &agents[i1];
@@ -149,9 +150,15 @@ impl Trainer {
                 continue;
             }
 
-            new_agents.push(g1.crossover(g2, (fitness[i1], fitness[i2])));
+            let new = g1.crossover(g2, (fitness[i1], fitness[i2]));
+            if new.is_recursive() {
+                continue;
+            }
+
+            new_agents.push(new);
         }
 
-        agents.extend(new_agents);
+        mem::swap(&mut *agents, &mut new_agents);
+        debug_assert_eq!(agents.len(), self.config.population_size);
     }
 }
