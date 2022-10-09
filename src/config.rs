@@ -5,7 +5,7 @@ pub struct Config {
 
     // == POPULATION  ==
     /// The chance of a node to have an edge on population init
-    pub init_edge_chance: f32,
+    // pub init_edge_chance: f32,
     /// Percent of the popluation to eggstermanate before repopulation
     pub population_kill_percent: f32,
 
@@ -35,7 +35,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             population_size: 150,
-            init_edge_chance: 0.75,
+            // init_edge_chance: 0.75,
             population_kill_percent: 0.20,
             excess_comp: 1.0,
             disjoint_comp: 1.0,

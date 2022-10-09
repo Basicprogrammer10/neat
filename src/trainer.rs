@@ -7,13 +7,12 @@ use std::sync::{
 use parking_lot::RwLock;
 use rand::{thread_rng, Rng};
 
-use crate::genome::NodeType;
 use crate::{config::Config, genome::Genome};
 
 pub struct Trainer {
     // == INFO ==
-    inputs: usize,
-    outputs: usize,
+    pub inputs: usize,
+    pub outputs: usize,
 
     // == GENOME ==
     pub agents: RwLock<Vec<Genome>>,
@@ -41,21 +40,13 @@ impl Trainer {
         self.innovation.fetch_add(1, Ordering::AcqRel)
     }
 
-    pub(crate) fn base_nodes(&self) -> Vec<NodeType> {
-        let mut base_nodes = Vec::with_capacity(self.inputs + self.outputs);
-        base_nodes.extend([NodeType::Sensor].repeat(self.inputs));
-        base_nodes.extend([NodeType::Output].repeat(self.outputs));
-        base_nodes
-    }
-
     /// Create the innitial population
     pub fn populate(self: Arc<Self>) -> Arc<Self> {
         let return_self = self.clone();
         let mut agents = self.agents.write();
 
-        let base_nodes = self.base_nodes();
         for _ in agents.len()..self.config.population_size {
-            agents.push(Genome::new(self.clone(), base_nodes.clone()))
+            agents.push(Genome::new(self.clone()))
         }
 
         return_self
@@ -68,7 +59,7 @@ impl Trainer {
         let mut working = agents.clone();
         let mut used_species = Vec::new();
 
-        'l: while working.len() > 0 {
+        'l: while !working.is_empty() {
             // Get and remove random genome
             let genome_index = rng.gen_range(0..working.len());
             let genome = working.remove(genome_index);
@@ -164,4 +155,3 @@ impl Trainer {
         agents.extend(new_agents);
     }
 }
-

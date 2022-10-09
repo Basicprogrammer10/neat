@@ -15,7 +15,7 @@ fn main() {
     let mut best = None;
 
     // Evolve for 200 genarations
-    for gen in 1..=140 {
+    for gen in 1..=200 {
         // Catagorize the species
         trainer.species_categorize();
         let fitness = trainer.species_fitness(&trainer.fitness(fit));
@@ -46,6 +46,7 @@ fn fit(_: usize, g: &Genome) -> f32 {
     for i in [[false, false], [false, true], [true, false], [true, true]] {
         let inp = [i[0] as usize as f32, i[1] as usize as f32];
         let real = (i[0] ^ i[1]) as usize as f32;
+        println!("==\n{}\n==", g.debug());
         let got = g.simulate(&inp)[0];
         sum += (real - got).abs();
     }
@@ -80,5 +81,5 @@ fn fit(_: usize, g: &Genome) -> f32 {
 - Look into nuron bias
 - Past mutations
 * Make system work with inout node counts not vecs of them
-- Dont store nodes as real objects just counts?
+* Dont store nodes as real objects just counts?
 */

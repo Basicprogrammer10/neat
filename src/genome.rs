@@ -15,10 +15,12 @@ use crate::{
 #[derive(Clone)]
 pub struct Genome {
     trainer: Arc<Trainer>,
+
+    pub genes: Vec<Gene>,
+    nodes: usize,
+
     pub id: usize,
     pub species: Option<usize>,
-    pub nodes: Vec<NodeType>,
-    pub genes: Vec<Gene>,
 }
 
 #[derive(Clone, Debug)]
@@ -44,34 +46,39 @@ struct NodeTester {
 }
 
 impl Genome {
-    pub fn new(trainer: Arc<Trainer>, io: Vec<NodeType>) -> Self {
+    pub fn new(trainer: Arc<Trainer>) -> Self {
         let mut genes = Vec::new();
-        for (i, e) in io.iter().enumerate() {
-            match e {
-                NodeType::Sensor => {
-                    if thread_rng().gen_bool(trainer.config.init_edge_chance.into()) {
-                        // Get a random output node
-                        let rand_out = io
-                            .iter()
-                            .enumerate()
-                            .filter(|x| *x.1 == NodeType::Output)
-                            .choose(&mut thread_rng())
-                            .expect("No Output Nodes");
 
-                        // Make new geane
-                        genes.push(Gene::random(trainer.new_innovation(), i, rand_out.0));
-                    }
-                }
-                _ => continue,
+        for i in 0..trainer.inputs {
+            for o in 0..trainer.outputs {
+                // Make new geane
+                genes.push(Gene::random(
+                    trainer.new_innovation(),
+                    i,
+                    trainer.inputs + o,
+                ));
             }
         }
+
         Self {
             id: trainer.new_innovation(),
             species: None,
-            trainer,
-            nodes: io,
             genes,
+            nodes: trainer.inputs + trainer.outputs,
+            trainer,
         }
+    }
+
+    pub fn classify_node(&self, id: usize) -> NodeType {
+        if id < self.trainer.inputs {
+            return NodeType::Sensor;
+        }
+
+        if id - self.trainer.inputs < self.trainer.outputs {
+            return NodeType::Output;
+        }
+
+        NodeType::Hidden
     }
 
     // δ = (c1 * E / N) + (c2 * D / N) + c3 * W
@@ -149,11 +156,11 @@ impl Genome {
     /// Use https://mermaid.live to render debug output
     pub fn debug(&self) -> String {
         let mut out = Vec::new();
-        let mut remaining_nodes = self.nodes.clone();
+        let mut remaining_nodes = (0..self.nodes).collect::<Vec<_>>();
 
         for i in self.genes.iter() {
-            let node_in = &self.nodes[i.node_in];
-            let node_out = &self.nodes[i.node_out];
+            let node_in = self.classify_node(i.node_in);
+            let node_out = self.classify_node(i.node_out);
 
             out.push(format!(
                 r#"{}("{:?}") -{t} {} {t}-> {}["{:?}"]"#,
@@ -165,12 +172,12 @@ impl Genome {
                 t = if i.enabled { "-" } else { "." }
             ));
 
-            remaining_nodes.retain(|x| x != node_in);
-            remaining_nodes.retain(|x| x != node_out);
+            remaining_nodes.retain(|x| *x != i.node_in);
+            remaining_nodes.retain(|x| *x != i.node_out);
         }
 
         for (i, e) in remaining_nodes.iter().enumerate() {
-            match e {
+            match self.classify_node(*e) {
                 NodeType::Sensor => out.push(format!(r#"unused-{}("{:?}")"#, i, e)),
                 NodeType::Output => out.push(format!(r#"unused-{}["{:?}"]"#, i, e)),
                 _ => panic!(),
@@ -194,14 +201,8 @@ impl Genome {
     }
 
     fn is_recursive(&self) -> bool {
-        for (i, _) in self
-            .nodes
-            .iter()
-            .enumerate()
-            .filter(|(_, x)| **x == NodeType::Sensor)
-        {
-            let mut seen_nodes = BitVec::<usize, Lsb0>::new();
-            seen_nodes.extend([false].repeat(self.nodes.len()));
+        for i in 0..self.trainer.inputs {
+            let mut seen_nodes = BitVec::<usize, Lsb0>::repeat(false, self.nodes);
             seen_nodes.set(i, true);
 
             let rc = Rc::new(RefCell::new(seen_nodes));
@@ -213,10 +214,9 @@ impl Genome {
         false
     }
 
-    pub fn mutate(&self, past_mutations: &mut Vec<(usize, (usize, usize))>) -> Self {
+    pub fn mutate(&self, past_mutations: &mut [(usize, (usize, usize))]) -> Self {
         let mut rng = thread_rng();
         let mut this = self.clone();
-        let nodes = this.nodes.len();
 
         // Mutate Weights
         for i in this.genes.iter_mut().filter(|x| x.enabled) {
@@ -238,16 +238,16 @@ impl Genome {
             for _ in 0..self.trainer.config.mutate_add_edge_tries {
                 // Genarate Indexes
 
-                let a = rng.gen_range(0..nodes);
-                let b = rng.gen_range(0..nodes);
+                let a = rng.gen_range(0..self.nodes);
+                let b = rng.gen_range(0..self.nodes);
 
                 // Verify Indexes
                 // Make sure not pointing to the same node twice, going in order of sensor => (hidden) => output
                 // not the other way around and the connection would not make a recursive connection
                 if a == b
                     || this.genes.iter().any(|x| x.connects(a, b))
-                    || this.nodes[a] == NodeType::Output
-                    || this.nodes[b] == NodeType::Sensor
+                    || this.classify_node(a) == NodeType::Output
+                    || this.classify_node(b) == NodeType::Sensor
                     || this.would_be_recursive(a, b)
                 {
                     continue;
@@ -271,17 +271,17 @@ impl Genome {
             let old_node_to = gene.node_out;
 
             gene.enabled = false;
-            this.nodes.push(NodeType::Hidden);
+            this.nodes += 1;
             this.genes.push(Gene {
                 node_in: old_node_from,
-                node_out: nodes,
+                node_out: this.nodes - 1,
                 weight: 1.0,
                 enabled: true,
                 innovation: self.trainer.new_innovation(),
             });
             this.genes.push(Gene::random(
                 self.trainer.new_innovation(),
-                nodes,
+                this.nodes - 1,
                 old_node_to,
             ));
         }
@@ -292,15 +292,6 @@ impl Genome {
     pub fn crossover(&self, other: &Self, fitness: (f32, f32)) -> Self {
         let mut rng = thread_rng();
         let mut genes = Vec::new();
-        let mut nodes = Vec::new();
-
-        let total_hidden = self
-            .nodes
-            .iter()
-            .chain(other.nodes.iter())
-            .fold(0, |inc, x| inc + (*x == NodeType::Hidden) as usize);
-        nodes.extend(self.trainer.base_nodes());
-        nodes.extend([NodeType::Hidden].repeat(total_hidden));
 
         let mut self_i = 0;
         let mut other_i = 0;
@@ -325,12 +316,10 @@ impl Genome {
                 genes.extend(self.genes[self_last..self_i].iter());
             } else if fitness.1 > fitness.0 {
                 genes.extend(other.genes[other_last..other_i].iter());
+            } else if rng.gen_bool(0.5) {
+                genes.extend(self.genes[self_last..self_i].iter());
             } else {
-                if rng.gen_bool(0.5) {
-                    genes.extend(self.genes[self_last..self_i].iter());
-                } else {
-                    genes.extend(other.genes[other_last..other_i].iter());
-                }
+                genes.extend(other.genes[other_last..other_i].iter());
             }
 
             if rng.gen_bool(0.5) {
@@ -364,19 +353,16 @@ impl Genome {
             id: self.trainer.new_innovation(),
             species: None,
             genes: genes.into_iter().cloned().collect(),
-            nodes,
+            nodes: self.nodes.max(other.nodes),
         }
     }
 
     pub fn simulate(&self, sensors: &[f32]) -> Vec<f32> {
-        let mut out = Vec::new();
+        let mut out = Vec::with_capacity(self.trainer.outputs);
         let node_tester = Rc::new(NodeTester::from_genome(self, sensors));
 
-        for (i, e) in self.nodes.iter().enumerate() {
-            match e {
-                NodeType::Output => out.push(node_tester.clone().prop(i)),
-                _ => continue,
-            }
+        for i in self.trainer.inputs..self.trainer.inputs + self.trainer.outputs {
+            out.push(node_tester.clone().prop(i));
         }
 
         out
@@ -385,17 +371,10 @@ impl Genome {
 
 impl NodeTester {
     fn from_genome(genome: &Genome, sensors: &[f32]) -> Self {
+        let mut sensors = sensors.iter();
         Self {
-            nodes: genome
-                .nodes
-                .iter()
-                .enumerate()
-                .map(|(i, x)| {
-                    RefCell::new(match x {
-                        NodeType::Sensor => Some(sensors[i]),
-                        _ => None,
-                    })
-                })
+            nodes: (0..genome.nodes)
+                .map(|_| RefCell::new(sensors.next().copied()))
                 .collect(),
             genes: genome.genes.clone(),
         }
