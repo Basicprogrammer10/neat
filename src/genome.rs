@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -44,7 +45,7 @@ pub enum NodeType {
 
 #[derive(Clone)]
 struct NodeTester {
-    pub nodes: Vec<RefCell<Option<f32>>>,
+    pub nodes: RefCell<HashMap<usize, Option<f32>>>,
     pub genes: Vec<Gene>,
 }
 
@@ -341,11 +342,21 @@ impl Genome {
 
 impl NodeTester {
     fn from_genome(genome: &Genome, sensors: &[f32]) -> Self {
-        let mut sensors = sensors.iter();
+        let mut nodes = HashMap::new();
+        let inputs = genome.trainer.inputs;
+        let outputs = genome.trainer.outputs;
+        debug_assert_eq!(sensors.len(), inputs);
+
+        for (i, e) in sensors.iter().enumerate().take(inputs) {
+            nodes.insert(i, Some(*e));
+        }
+
+        for i in inputs..inputs + outputs {
+            nodes.insert(i, None);
+        }
+
         Self {
-            nodes: (0..genome.nodes)
-                .map(|_| RefCell::new(sensors.next().copied()))
-                .collect(),
+            nodes: RefCell::new(nodes),
             genes: genome.genes.clone(),
         }
     }
@@ -359,9 +370,9 @@ impl NodeTester {
             // If so add that to the out
             // Else recursively call prop function
             let new_self = self.clone();
-            let ref_node = &self.nodes[i.node_in];
+            let mut node_map = self.nodes.borrow_mut();
+            let ref_node = node_map.entry(i.node_in).or_default();
             let val = ref_node
-                .borrow()
                 .unwrap_or_else(|| new_self.prop(i.node_in));
             out += val * i.weight;
         }
