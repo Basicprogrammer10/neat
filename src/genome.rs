@@ -26,7 +26,7 @@ pub struct Genome {
     pub species: Option<usize>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Gene {
     pub node_in: usize,
     pub node_out: usize,
@@ -54,7 +54,7 @@ impl Genome {
 
         for i in 0..trainer.inputs {
             for o in 0..trainer.outputs {
-                // Make new geane
+                // Make new gene
                 genes.push(Gene::random(
                     trainer.new_innovation(),
                     i,
@@ -85,12 +85,12 @@ impl Genome {
     }
 
     // δ = (c1 * E / N) + (c2 * D / N) + c3 * W
-    // E: Excess geanes
-    // D: Disjoint geanes
-    // W: Weight diffrence between avraged
-    // N: Geanes in the larger genome (normalised)
+    // E: Excess genes
+    // D: Disjoint genes
+    // W: Weight difference between averaged
+    // N: Genes in the larger genome (normalized)
     pub fn distance(&self, other: &Self) -> f32 {
-        // Gets all the innovations numbers of the 'other' geanome
+        // Gets all the innovations numbers of the 'other' genome
         let other_innovations = other.genes.iter().map(|x| x.innovation).collect::<Vec<_>>();
         let self_innovations = self.genes.iter().map(|x| x.innovation).collect::<Vec<_>>();
         let matching_innovations = self
@@ -100,7 +100,7 @@ impl Genome {
             .filter(|x| other_innovations.contains(x))
             .collect::<Vec<_>>();
 
-        // Get the count of excess geanes
+        // Get the count of excess genes
         let self_max_innovation = self.genes.iter().map(|x| x.innovation).sum::<usize>();
         let other_max_innovation = other_innovations.iter().sum::<usize>();
         let min_max_innovation = self_max_innovation.min(other_max_innovation);
@@ -120,13 +120,13 @@ impl Genome {
             .retain(|x| *x < min_max_innovation && !matching_innovations.contains(x));
         let d = disjoint_innovations.len();
 
-        // Get the larger gene count (normalised)
+        // Get the larger gene count (normalized)
         let mut n = self.genes.len().max(other.genes.len());
         if n < 20 {
             n = 1;
         }
 
-        // Get avrage weight diffrence
+        // Get average weight difference
         let self_matching_weight = self
             .genes
             .iter()
@@ -142,12 +142,12 @@ impl Genome {
             .map(|(a, b)| (a - b).abs())
             .sum::<f32>()
             / matching_innovations.len() as f32;
-        // Furthure Research Needed
+        // further research needed
         if w.is_nan() {
             w = 0.0;
         }
 
-        // Distance Equastion
+        // Distance equation
         let c1 = self.trainer.config.excess_comp;
         let c2 = self.trainer.config.disjoint_comp;
         let c3 = self.trainer.config.weight_comp;
@@ -186,7 +186,7 @@ impl Genome {
         out.join("\n")
     }
 
-    // Checks if a edge from a -> b would cause a loop in the nural network
+    // Checks if a edge from a -> b would cause a loop in the neural network
     fn would_be_recursive(&self, a: usize, b: usize) -> bool {
         let mut new = self.clone();
         new.genes.push(Gene {
@@ -235,7 +235,7 @@ impl Genome {
         // Add Edge
         if rng.gen_bool(self.trainer.config.mutate_add_edge.into()) {
             for _ in 0..self.trainer.config.mutate_add_edge_tries {
-                // Genarate Indexes
+                // generate indices
 
                 let a = rng.gen_range(0..self.nodes);
                 let b = rng.gen_range(0..self.nodes);
@@ -290,81 +290,35 @@ impl Genome {
 
     pub fn crossover(&self, other: &Self, fitness: (f32, f32)) -> Self {
         let mut rng = thread_rng();
-        let mut genes = Vec::new();
+        let mut genes = Vec::with_capacity(self.genes.len().max(other.genes.len()));
 
-        let mut self_index = 0;
-        let mut self_last = 0;
-        let mut other_index = 0;
-        let mut other_last = 0;
+        let (matching, self_genes, other_genes) = gene_diff(&self.genes, &other.genes);
 
-        // Add Matching genes (randomly from each genome)
-        while self_index < self.genes.len() && other_index < other.genes.len() {
-            let self_gene = &self.genes[self_index];
-            let other_gene = &other.genes[other_index];
-
-            match self_gene.innovation.cmp(&other_gene.innovation) {
-                Ordering::Greater => other_index += 1,
-                Ordering::Less => self_index += 1,
-                _ => {}
+        // Add matching
+        for i in matching {
+            if rng.gen_bool(0.5) {
+                genes.push(i.0);
+                continue;
             }
+            genes.push(i.1);
+        }
 
-            // If innovations match up
-            // Add disjoint genes
-            genes.extend(match fitness.0.partial_cmp(&fitness.1).unwrap() {
-                Ordering::Equal => [
-                    other.genes[other_last..other_index].iter(),
-                    self.genes[self_last..self_index].iter(),
-                ]
+        // Add nonmatching
+        let fitter_nonmatching = match fitness.0.partial_cmp(&fitness.1).unwrap() {
+            Ordering::Greater => self_genes,
+            Ordering::Less => other_genes,
+            _ => [self_genes, other_genes]
                 .choose(&mut rng)
                 .unwrap()
                 .to_owned(),
-                Ordering::Less => other.genes[other_last..other_index].iter(),
-                Ordering::Greater => self.genes[self_last..self_index].iter(),
-            });
-
-            // Add one of the genes
-            genes.push(*[self_gene, other_gene].choose(&mut rng).unwrap());
-
-            self_index += 1;
-            other_index += 1;
-            self_last = self_index;
-            other_last = other_index;
-        }
-
-        // Add Excess genes
-
-        // TODO: this
-        //    if self.genes.len() > other.genes.len() && self_last < self.genes.len() {
-        //        genes.extend(self.genes[self_last..].iter());
-        //    } else if other.genes.len() > self.genes.len() && other_last < other.genes.len() {
-        //        genes.extend(other.genes[other_last..].iter());
-        //    } else if fitness.0 > fitness.1 && self_last < self.genes.len() {
-        //        genes.extend(self.genes[self_last..].iter());
-        //    } else if fitness.1 > fitness.0 && other_last < other.genes.len() {
-        //        genes.extend(other.genes[other_last..].iter());
-        //    } else if rng.gen_bool(0.5) && self_last < self.genes.len() {
-        //        genes.extend(self.genes[self_last..].iter());
-        //    } else if other_last < other.genes.len() {
-        //        genes.extend(other.genes[other_last..].iter());
-        //    }
-
-        //        genes.extend(match fitness.0.partial_cmp(&fitness.1).unwrap() {
-        //            Ordering::Equal => [
-        //                other.genes[other_last..].iter(),
-        //                self.genes[self_last..].iter(),
-        //            ]
-        //            .choose(&mut rng)
-        //            .unwrap()
-        //            .to_owned(),
-        //            Ordering::Less => other.genes[other_last..].iter(),
-        //            Ordering::Greater => self.genes[self_last..].iter(),
-        //        });
+        };
+        genes.extend(fitter_nonmatching.iter());
 
         Genome {
             trainer: self.trainer.clone(),
             id: self.trainer.new_innovation(),
             species: None,
-            genes: genes.into_iter().cloned().collect(),
+            genes: genes.into_iter().copied().collect(),
             nodes: self.nodes.max(other.nodes),
         }
     }
@@ -439,4 +393,29 @@ fn is_recursive_checker(seen_nodes: Rc<RefCell<BitVec>>, genes: &[Gene], index: 
     }
 
     false
+}
+
+// -> (Matching Genes, A Genes, B Genes)
+fn gene_diff<'a>(
+    a: &'a [Gene],
+    b: &'a [Gene],
+) -> (Vec<(&'a Gene, &'a Gene)>, Vec<&'a Gene>, Vec<&'a Gene>) {
+    let mut matching = Vec::new();
+    let mut a_extra = Vec::new();
+    let mut b_extra = b.iter().collect::<Vec<_>>();
+
+    for i in a {
+        let matched = match b.iter().find(|x| x.innovation == i.innovation) {
+            Some(i) => i,
+            None => {
+                a_extra.push(i);
+                continue;
+            }
+        };
+
+        b_extra.retain(|x| x.innovation != i.innovation);
+        matching.push((i, matched));
+    }
+
+    (matching, a_extra, b_extra)
 }

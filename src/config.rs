@@ -28,6 +28,9 @@ pub struct Config {
     pub mutate_add_edge_tries: usize,
     /// The chance to disable an edge
     pub mutate_disable_edge: f32,
+
+    // == CROSSOVER CHANCES ==
+    pub crossover_keep_disabled: f32,
 }
 
 // Default values stolen from the NEAT paper
@@ -47,6 +50,7 @@ impl Default for Config {
             mutate_add_edge: 0.05,
             mutate_add_edge_tries: 20,
             mutate_disable_edge: 0.0,
+            crossover_keep_disabled: 0.1, // idk
         }
     }
 }

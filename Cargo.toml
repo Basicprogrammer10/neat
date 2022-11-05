@@ -1,5 +1,5 @@
 [package]
-authors = ["Connor Slade <connor@connorcode.com>"]
+authors = ["Connor Slade <connor@connorcode.com>", "Brandon Li <sirbrandonthenerd@gmail.com>"]
 edition = "2021"
 name = "neat"
 version = "0.1.0"
@@ -10,3 +10,5 @@ bitvec = "1.0.1"
 parking_lot = "0.12.1"
 rand = "0.8.5"
 serde = "1.0.145"
+
+# bevy = { version = "0.8.1", features = ["dynamic"] }

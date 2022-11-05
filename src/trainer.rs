@@ -138,7 +138,7 @@ impl Trainer {
         let mut rng = thread_rng();
         let mut agents = self.agents.write();
         let mut new_agents = Vec::new();
-        assert!(agents.len() > 1);
+        debug_assert!(agents.len() > 1);
 
         while new_agents.len() < self.config.population_size {
             let i1 = rng.gen_range(0..agents.len());
