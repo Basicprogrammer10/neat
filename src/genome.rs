@@ -224,7 +224,7 @@ impl Genome {
                     i.weight = rng.gen_range(-1f32..=1f32);
                     continue;
                 }
-                i.weight *= rng.gen::<f32>()
+                i.weight *= rng.gen_range(-1f32..=1f32);
             }
 
             if rng.gen_bool(self.trainer.config.mutate_disable_edge.into()) {
@@ -259,7 +259,9 @@ impl Genome {
         }
 
         // Add Node
-        if !this.genes.is_empty() && rng.gen_bool(self.trainer.config.mutate_add_node.into()) {
+        // ==
+        debug_assert!(!this.genes.is_empty());
+        if rng.gen_bool(self.trainer.config.mutate_add_node.into()) {
             let gene = this
                 .genes
                 .iter_mut()
@@ -284,6 +286,7 @@ impl Genome {
             ));
             this.nodes += 1;
         }
+        // ==
 
         this
     }
@@ -296,11 +299,12 @@ impl Genome {
 
         // Add matching
         for i in matching {
-            if rng.gen_bool(0.5) {
-                genes.push(i.0);
-                continue;
+            let mut gene = *if rng.gen_bool(0.4) { i.0 } else { i.1 };
+            if !gene.enabled && !rng.gen_bool(self.trainer.config.crossover_keep_disabled.into()) {
+                gene.enabled = true;
             }
-            genes.push(i.1);
+
+            genes.push(gene);
         }
 
         // Add nonmatching
@@ -312,13 +316,13 @@ impl Genome {
                 .unwrap()
                 .to_owned(),
         };
-        genes.extend(fitter_nonmatching.iter());
+        genes.extend(fitter_nonmatching.iter().copied());
 
         Genome {
             trainer: self.trainer.clone(),
             id: self.trainer.new_innovation(),
             species: None,
-            genes: genes.into_iter().copied().collect(),
+            genes,
             nodes: self.nodes.max(other.nodes),
         }
     }

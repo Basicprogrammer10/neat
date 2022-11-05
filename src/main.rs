@@ -11,7 +11,7 @@ use crate::trainer::Trainer;
 fn main() {
     // Create a new trainer with 2 inputs and 1 output
     // Then populate it
-    let trainer = Arc::new(Trainer::new(2, 1)).populate();
+    let trainer = Arc::new(Trainer::new(3, 1)).populate();
 
     // let mut g1 = Genome::new(trainer.clone());
     // let mut g2 = Genome::new(trainer.clone());
@@ -63,20 +63,16 @@ fn fit(_: usize, g: &Genome) -> f32 {
     let mut sum = 0.0;
 
     for i in [[false, false], [false, true], [true, false], [true, true]] {
-        let inp = [i[0] as usize as f32, i[1] as usize as f32];
+        let inp = [1.0, i[0] as usize as f32, i[1] as usize as f32];
         let real = (i[0] ^ i[1]) as usize as f32;
-        // println!("=={}\n{}\n==", g.is_recursive(), g.debug());
         let got = g.simulate(&inp)[0];
         sum += (real - got).abs();
     }
 
-    4.0 - sum
+    (4.0 - sum) / 4.0
 }
 
 /*
-== LINKS ==
-- https://devpost.com/submit-to/16634-hackphs-2022/manage/submissions/367149-neuroevolution-of-augmenting-topologies
-
 == Example Implementation =
 - https://github.com/suhdonghwi/neat
 - https://github.com/TLmaK0/rustneat
@@ -101,8 +97,8 @@ fn fit(_: usize, g: &Genome) -> f32 {
 * Selection
 * Debug weird freezes when doing tens of thousands of mutations
 - While less than 15 genes bias add node operation to older genes
-- When repopulating, remove the worse preforming genomes first. Then crossover.
-- Look into neuron bias
+* When repopulating, remove the worse preforming genomes first. Then crossover.
+* Look into neuron bias
 - Past mutations
 * Make system work with inout node counts not vecs of them
 * Don't store nodes as real objects just counts?
