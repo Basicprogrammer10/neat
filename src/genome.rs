@@ -213,7 +213,7 @@ impl Genome {
         false
     }
 
-    pub fn mutate(&self, past_mutations: &mut [(usize, (usize, usize))]) -> Self {
+    pub fn mutate(&self, _past_mutations: &mut [(usize, (usize, usize))]) -> Self {
         let mut rng = thread_rng();
         let mut this = self.clone();
 
@@ -332,17 +332,33 @@ impl Genome {
         }
 
         // Add Excess genes
-        genes.extend(match fitness.0.partial_cmp(&fitness.1).unwrap() {
-            Ordering::Equal => [
-                other.genes[other_last..].iter(),
-                self.genes[self_last..].iter(),
-            ]
-            .choose(&mut rng)
-            .unwrap()
-            .to_owned(),
-            Ordering::Less => other.genes[other_last..].iter(),
-            Ordering::Greater => self.genes[self_last..].iter(),
-        });
+
+        // TODO: this
+        //    if self.genes.len() > other.genes.len() && self_last < self.genes.len() {
+        //        genes.extend(self.genes[self_last..].iter());
+        //    } else if other.genes.len() > self.genes.len() && other_last < other.genes.len() {
+        //        genes.extend(other.genes[other_last..].iter());
+        //    } else if fitness.0 > fitness.1 && self_last < self.genes.len() {
+        //        genes.extend(self.genes[self_last..].iter());
+        //    } else if fitness.1 > fitness.0 && other_last < other.genes.len() {
+        //        genes.extend(other.genes[other_last..].iter());
+        //    } else if rng.gen_bool(0.5) && self_last < self.genes.len() {
+        //        genes.extend(self.genes[self_last..].iter());
+        //    } else if other_last < other.genes.len() {
+        //        genes.extend(other.genes[other_last..].iter());
+        //    }
+
+        //        genes.extend(match fitness.0.partial_cmp(&fitness.1).unwrap() {
+        //            Ordering::Equal => [
+        //                other.genes[other_last..].iter(),
+        //                self.genes[self_last..].iter(),
+        //            ]
+        //            .choose(&mut rng)
+        //            .unwrap()
+        //            .to_owned(),
+        //            Ordering::Less => other.genes[other_last..].iter(),
+        //            Ordering::Greater => self.genes[self_last..].iter(),
+        //        });
 
         Genome {
             trainer: self.trainer.clone(),
