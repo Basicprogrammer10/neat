@@ -11,7 +11,6 @@ use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 
 use crate::innovation::Innovations;
-use crate::misc::sigmoid;
 use crate::species::Specie;
 use crate::{config::Config, genome::Genome};
 
@@ -47,13 +46,21 @@ impl Trainer {
     pub fn gen(&self, fit: impl Fn(usize, &Genome) -> f32) {
         let start = Instant::now();
         self.species_categorize();
+        self.species
+            .write()
+            .iter_mut()
+            .for_each(|e| e.count = e.count());
 
         // Update Fitnesses
+        let mut species = self.species.write();
         self.agents
             .write()
             .iter_mut()
             .enumerate()
-            .for_each(|(i, e)| e.fitness = Some(sigmoid((fit)(i, e))));
+            .for_each(|(i, e)| {
+                e.fitness = Some((fit)(i, e) / species[e.species.unwrap()].count as f32)
+            });
+
         let maxfit = self
             .agents
             .read()
@@ -61,20 +68,21 @@ impl Trainer {
             .map(|x| x.fitness.unwrap())
             .fold(f32::MIN, |x, i| x.max(i));
 
-        self.species.write().iter_mut().for_each(|x| {
+        species.iter_mut().for_each(|x| {
             x.update_fitness();
             x.kill();
         });
+
         self.repopulate();
         self.mutate_population();
         self.gen.fetch_add(1, Ordering::AcqRel);
 
         // Status message
         println!(
-            "GEN: {:3} | MAXFIT: {:3.0}% | SPEC: {:2} | TIME: {}ms",
+            "GEN: {:3} | MAXFIT: {:3.2}% | SPEC: {:2} | TIME: {}ms",
             self.gen.load(Ordering::Acquire),
             maxfit * 100.,
-            self.species.read().len(),
+            species.len(),
             start.elapsed().as_millis()
         );
     }
@@ -153,7 +161,9 @@ impl Trainer {
 
     pub fn mutate_population(&self) {
         let mut agents = self.agents.write();
-        agents.iter_mut().for_each(|x| *x = x.mutate());
+        for i in 0..10 {
+            agents.iter_mut().for_each(|x| *x = x.mutate());
+        }
     }
 
     pub fn repopulate(&self) {
@@ -190,7 +200,12 @@ impl Trainer {
             let mut tries = self.config.mutate_add_edge_tries;
             let mut new = None;
             while tries > 0 {
-                new = Some(g1.crossover(g2));
+                // new = Some(g1.crossover(g2));
+                new = Some({
+                    let mut mango = g1.clone();
+                    mango.id = self.innovator.new_genome();
+                    mango 
+                });
                 if new.as_ref().unwrap().is_recursive() {
                     tries -= 1;
                     continue;

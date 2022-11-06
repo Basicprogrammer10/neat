@@ -5,7 +5,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
-use bitvec::{order::Lsb0, vec::BitVec};
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::{
@@ -50,7 +49,7 @@ pub enum NodeType {
 #[derive(Clone)]
 struct NodeTester {
     pub nodes: RefCell<HashMap<usize, Option<f32>>>,
-    pub genes: Vec<Gene>,
+    pub genes: Genome,
 }
 
 impl Genome {
@@ -63,6 +62,22 @@ impl Genome {
                 genes.push(Gene::random(trainer.clone(), i, trainer.inputs + o));
             }
         }
+
+        // let mango = |a, b| Gene {
+        //     node_in: a,
+        //     node_out: b,
+        //     weight: thread_rng().gen_range(-1f32..1f32),
+        //     enabled: true,
+        //     innovation: trainer.innovator.new_edge((a, b)),
+        // };
+
+        // genes.push(mango(0, 3));
+        // genes.push(mango(0, 4));
+        // genes.push(mango(1, 4));
+        // genes.push(mango(2, 4));
+        // genes.push(mango(4, 3));
+        // genes.push(mango(1, 3));
+        // genes.push(mango(2, 3));
 
         Self {
             id: trainer.innovator.new_genome(),
@@ -162,14 +177,15 @@ impl Genome {
     pub fn debug(&self) -> String {
         let mut out = Vec::new();
 
-        for i in self.genes.iter() {
+        for i in self.genes.iter().filter(|x| x.enabled) {
             let node_in = self.classify_node(i.node_in);
             let node_out = self.classify_node(i.node_out);
 
             out.push(format!(
-                r#"{}("{:?}") -{t} {} {t}-> {}["{:?}"]"#,
+                r#"{}("{:?} {}") -{t} {} {t}-> {}["{:?}"]"#,
                 i.node_in,
                 node_in,
+                i.node_in,
                 i.weight.sign_str(),
                 i.node_out,
                 node_out,
@@ -195,8 +211,8 @@ impl Genome {
 
     pub fn is_recursive(&self) -> bool {
         for i in 0..self.trainer.inputs {
-            let mut seen_nodes = BitVec::<usize, Lsb0>::repeat(false, self.node_id);
-            seen_nodes.set(i, true);
+            let mut seen_nodes = HashSet::new();
+            seen_nodes.insert(i);
 
             if is_recursive_checker(seen_nodes.clone(), &self.genes, i) {
                 return true;
@@ -258,18 +274,20 @@ impl Genome {
 
         // Add Node
         if rng.gen_bool(self.trainer.config.mutate_add_node.into()) {
-            let mut gene = if this.genes.len() < 15 {
-                let weights =
-                    WeightedIndex::new((0..this.genes.len()).rev().map(|x| x + 1)).unwrap();
+            // let mut gene = if this.genes.len() < 15  && false{
+            //     dbg!((0..this.genes.len()).rev().map(|x| x + 1).collect::<Vec<_>>());
+            //     let weights =
+            //         WeightedIndex::new((0..this.genes.len()).rev().map(|x| x + 1)).unwrap();
 
-                &mut this.genes[weights.sample(&mut rng)]
-            } else {
-                this.genes
-                    .iter_mut()
-                    .filter(|x| x.enabled)
-                    .choose(&mut rng)
-                    .unwrap()
-            };
+            //     &mut this.genes[weights.sample(&mut rng)]
+            // } else {
+            let mut gene = this
+                .genes
+                .iter_mut()
+                .filter(|x| x.enabled)
+                .choose(&mut rng)
+                .unwrap();
+            // };
 
             let old_node_from = gene.node_in;
             let old_node_to = gene.node_out;
@@ -379,7 +397,7 @@ impl NodeTester {
 
         Self {
             nodes: RefCell::new(nodes),
-            genes: genome.genes.clone(),
+            genes: genome.clone(),
         }
     }
 
@@ -387,7 +405,12 @@ impl NodeTester {
         let mut out = 0.0;
 
         // Get nodes that connect to this one
-        for i in self.genes.iter().filter(|x| x.enabled && x.node_out == to) {
+        for i in self
+            .genes
+            .genes
+            .iter()
+            .filter(|x| x.enabled && x.node_out == to)
+        {
             // Check if the node this gene is refrencing is a sensor
             // If so add that to the out
             // Else recursively call prop function
@@ -402,6 +425,10 @@ impl NodeTester {
                 }
             };
             out += val * i.weight;
+        }
+
+        if self.genes.classify_node(to) == NodeType::Hidden {
+            sigmoid(out);
         }
 
         out
@@ -424,11 +451,12 @@ impl Gene {
     }
 }
 
-fn is_recursive_checker(mut seen_nodes: BitVec, genes: &[Gene], index: usize) -> bool {
+fn is_recursive_checker(seen_nodes: HashSet<usize>, genes: &[Gene], index: usize) -> bool {
     for i in genes.iter().filter(|x| x.enabled && x.node_in == index) {
-        let seen = seen_nodes[i.node_out];
-        seen_nodes.set(i.node_out, true);
-        if seen || is_recursive_checker(seen_nodes.clone(), genes, i.node_out) {
+        let mut seen_nodes = seen_nodes.clone();
+        let seen = seen_nodes.contains(&i.node_out);
+        seen_nodes.insert(i.node_out);
+        if seen || is_recursive_checker(seen_nodes, genes, i.node_out) {
             return true;
         }
     }

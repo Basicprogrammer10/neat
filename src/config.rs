@@ -39,19 +39,19 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             population_size: 150,
-            population_kill_percent: 0.20,
+            population_kill_percent: 0.9,
             excess_comp: 1.0,
-            disjoint_comp: 1.0,
+            disjoint_comp: 0.5,
             weight_comp: 0.4,
-            compatibility_threshold: 3.0,
-            mutate_weight: 0.8,
-            mutate_weight_reset: 0.1,
+            compatibility_threshold: 15.0,
+            mutate_weight: 0.9,
+            mutate_weight_reset: 0.2,
             mutate_add_node: 0.03,
-            mutate_add_edge: 0.05,
+            mutate_add_edge: 0.5,
             mutate_add_edge_tries: 20,
             mutate_disable_edge: 0.0,
             crossover_keep_disabled: 0.4,
-            crossover_trys: 1,
+            crossover_trys: 5,
         }
     }
 }

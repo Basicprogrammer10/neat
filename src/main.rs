@@ -8,7 +8,7 @@ mod species;
 mod trainer;
 use genome::Genome;
 
-use crate::trainer::Trainer;
+use crate::{misc::sigmoid, trainer::Trainer};
 
 fn main() {
     // Create a new trainer with 2 inputs and 1 output
@@ -17,7 +17,7 @@ fn main() {
     let mut best = None;
 
     // Evolve for 200 genarations
-    for _ in 1..=200 {
+    for _ in 1..=30 {
         trainer.gen(fit);
     }
 
@@ -33,21 +33,41 @@ fn main() {
             .clone(),
     );
 
+    for i in [[false, false], [false, true], [true, false], [true, true]] {
+        let inp = [1.0, i[0] as usize as f32, i[1] as usize as f32];
+        let real = (i[0] ^ i[1]) as usize as f32;
+        let got = sigmoid(best.as_ref().unwrap().simulate(&inp)[0]);
+        println!(
+            "{:5?} | REAL {} | GOT {:.3} | {}",
+            i,
+            real,
+            got,
+            if got >= 0.5 { "+" } else { "-" }
+        );
+    }
+
     println!("{}", best.unwrap().debug());
 }
 
 // Define an XoR fitness function
 fn fit(_: usize, g: &Genome) -> f32 {
-    let mut sum = 0.0;
+    let mut err = 0.0;
 
     for i in [[false, false], [false, true], [true, false], [true, true]] {
         let inp = [1.0, i[0] as usize as f32, i[1] as usize as f32];
         let real = (i[0] ^ i[1]) as usize as f32;
         let got = g.simulate(&inp)[0];
-        sum += (real - got).abs();
+        err += (real - got).abs();
+        // err += if got >= 0.5 && (i[0] ^ i[1]) {
+        //     0.0
+        // } else if got < 0.5 && !(i[0] ^ i[1]) {
+        //     0.0
+        // } else {
+        //     1.0
+        // };
     }
 
-    (4.0 - sum) / 4.0
+    (4.0 - err) / 4.0
 }
 
 /*

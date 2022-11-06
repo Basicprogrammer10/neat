@@ -1,6 +1,6 @@
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::atomic::Ordering;
 
-use crate::{genome::Genome, innovation::SpecieCount, trainer::Trainer};
+use crate::{genome::Genome, innovation::SpecieCount};
 
 pub struct Specie {
     /// Id of the spesie
@@ -8,8 +8,10 @@ pub struct Specie {
 
     /// The genome that classifies the spesies
     pub owner: Genome,
+    /// The number of agents in the species
+    pub count: usize,
     /// The genaration at which the spesies was created
-    age: usize,
+    _age: usize,
     /// The last fitness of the spesies
     fitness: Option<f32>,
     /// The number of genarations the fitness hasent gone up
@@ -26,8 +28,9 @@ impl Specie {
             id,
             Self {
                 id,
-                age: owner.trainer.gen.load(Ordering::Acquire),
+                _age: owner.trainer.gen.load(Ordering::Acquire),
                 owner,
+                count: 0,
                 fitness: None,
                 stagnant: 0,
             },
