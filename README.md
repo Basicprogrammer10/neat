@@ -1,6 +1,4 @@
 # neat
 🧠 neuroevolution of augmenting topologies implamentation
 
-idk eaither
-
-i spelled that wrong dident i
+[Evolving Neural Networks through Augmenting Topologies Paper](https://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf)
