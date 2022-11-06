@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::{cell::RefCell, cmp::Ordering};
 
+use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
 use bitvec::prelude::Lsb0;
 use bitvec::vec::BitVec;
 use rand::{
@@ -160,9 +160,8 @@ impl Genome {
     /// Use https://mermaid.live to render debug output
     pub fn debug(&self) -> String {
         let mut out = Vec::new();
-        let mut remaining_nodes = (0..self.nodes).collect::<Vec<_>>();
 
-        for i in self.genes.iter() {
+        for i in self.genes.iter().filter(|x| x.enabled) {
             let node_in = self.classify_node(i.node_in);
             let node_out = self.classify_node(i.node_out);
 
@@ -175,13 +174,6 @@ impl Genome {
                 node_out,
                 t = if i.enabled { "-" } else { "." }
             ));
-
-            remaining_nodes.retain(|x| *x != i.node_in);
-            remaining_nodes.retain(|x| *x != i.node_out);
-        }
-
-        for (i, e) in remaining_nodes.iter().enumerate() {
-            out.push(format!(r#"unused-{}("{:?}")"#, i, self.classify_node(*e)));
         }
 
         out.join("\n")
@@ -205,8 +197,7 @@ impl Genome {
             let mut seen_nodes = BitVec::<usize, Lsb0>::repeat(false, self.nodes);
             seen_nodes.set(i, true);
 
-            let rc = Rc::new(RefCell::new(seen_nodes));
-            if is_recursive_checker(rc.clone(), &self.genes, i) {
+            if is_recursive_checker(seen_nodes.clone(), &self.genes, i) {
                 return true;
             }
         }
@@ -235,11 +226,17 @@ impl Genome {
 
         // Add Edge
         if rng.gen_bool(self.trainer.config.mutate_add_edge.into()) {
-            for _ in 0..self.trainer.config.mutate_add_edge_tries {
-                // generate indices
+            // Make a vec of hidden nodes
+            let mut hidden = HashSet::new();
+            for i in &self.genes {
+                hidden.insert(i.node_out);
+            }
+            let hidden = hidden.iter().collect::<Vec<_>>();
 
-                let a = rng.gen_range(0..self.nodes);
-                let b = rng.gen_range(0..self.nodes);
+            for _ in 0..self.trainer.config.mutate_add_edge_tries {
+                // Generate indices
+                let a = **hidden.choose(&mut rng).unwrap();
+                let b = **hidden.choose(&mut rng).unwrap();
 
                 // Verify Indexes
                 // Make sure not pointing to the same node twice, going in order of sensor => (hidden) => output
@@ -372,8 +369,13 @@ impl NodeTester {
             let new_self = self.clone();
             let mut node_map = self.nodes.borrow_mut();
             let ref_node = node_map.entry(i.node_in).or_default();
-            let val = ref_node
-                .unwrap_or_else(|| new_self.prop(i.node_in));
+            let val = match ref_node {
+                Some(i) => *i,
+                None => {
+                    drop(node_map);
+                    new_self.prop(i.node_in)
+                }
+            };
             out += val * i.weight;
         }
 
@@ -397,11 +399,10 @@ impl Gene {
     }
 }
 
-fn is_recursive_checker(seen_nodes: Rc<RefCell<BitVec>>, genes: &[Gene], index: usize) -> bool {
-    let nodes = seen_nodes.clone();
+fn is_recursive_checker(mut seen_nodes: BitVec, genes: &[Gene], index: usize) -> bool {
     for i in genes.iter().filter(|x| x.enabled && x.node_in == index) {
-        let seen = nodes.borrow()[i.node_out];
-        nodes.borrow_mut().set(i.node_out, true);
+        let seen = seen_nodes[i.node_out];
+        seen_nodes.set(i.node_out, true);
         if seen || is_recursive_checker(seen_nodes.clone(), genes, i.node_out) {
             return true;
         }

@@ -150,7 +150,9 @@ impl Trainer {
                 continue;
             }
 
-            let new = g1.crossover(g2, (fitness[i1], fitness[i2]));
+            // let new = g1.crossover(g2, (fitness[i1], fitness[i2]));
+            let mut new = g1.clone();
+            new.id = self.new_innovation();
             if new.is_recursive() {
                 continue;
             }

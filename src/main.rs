@@ -11,13 +11,18 @@ use crate::trainer::Trainer;
 fn main() {
     // Create a new trainer with 2 inputs and 1 output
     // Then populate it
-    let trainer = Arc::new(Trainer::new(2, 1)).populate();
+    let trainer = Arc::new(Trainer::new(3, 1)).populate();
 
-    let genome = Genome::new(trainer);
-    println!("{}", genome.debug());
-    println!("{:?}", genome.simulate(&[1.0, 1.0]));
+  // let g1 = Genome::new(trainer);
+  // dbg!(g1.is_recursive());
+  //   return;
 
-    return;
+  
+    // let genome = Genome::new(trainer);
+    // println!("{}", genome.debug());
+    // println!("{:?}", genome.simulate(&[1.0, 1.0]));
+
+    // return;
 
     // let mut g1 = Genome::new(trainer.clone());
     // let mut g2 = Genome::new(trainer.clone());
