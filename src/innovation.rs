@@ -32,7 +32,6 @@ impl Innovations {
     }
 
     // == New Innovations ==
-    #[inline]
     pub fn new_edge(&self, x: (usize, usize)) -> EdgeCount {
         *self
             .past_connection
@@ -41,12 +40,10 @@ impl Innovations {
             .or_insert_with(|| self.edge_count.fetch_add(1, Ordering::AcqRel))
     }
 
-    #[inline]
     pub fn new_specie(&self) -> SpecieCount {
         self.specie_count.fetch_add(1, Ordering::AcqRel)
     }
 
-    #[inline]
     pub fn new_genome(&self) -> GenomeCount {
         self.genome_count.fetch_add(1, Ordering::AcqRel)
     }

@@ -39,7 +39,6 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             population_size: 150,
-            // init_edge_chance: 0.75,
             population_kill_percent: 0.20,
             excess_comp: 1.0,
             disjoint_comp: 1.0,
@@ -51,7 +50,7 @@ impl Default for Config {
             mutate_add_edge: 0.05,
             mutate_add_edge_tries: 20,
             mutate_disable_edge: 0.0,
-            crossover_keep_disabled: 0.1, // idk
+            crossover_keep_disabled: 0.4,
             crossover_trys: 1,
         }
     }

@@ -13,8 +13,8 @@ use rand::{
     thread_rng, Rng,
 };
 
-use crate::innovation::EdgeCount;
 use crate::{
+    innovation::EdgeCount,
     misc::{sigmoid, SignString},
     trainer::Trainer,
 };
