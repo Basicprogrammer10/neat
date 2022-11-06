@@ -11,7 +11,7 @@ pub struct Specie {
     /// The genaration at which the spesies was created
     age: usize,
     /// The last fitness of the spesies
-    fitness: Option<f64>,
+    fitness: Option<f32>,
     /// The number of genarations the fitness hasent gone up
     /// If it goes up this should be reset
     stagnant: usize,
@@ -34,16 +34,62 @@ impl Specie {
         )
     }
 
+    /// Kill a set percent of the population
+    pub fn kill(&self) {
+        let mut species = self.this_species();
+        let to_remove =
+            (species.len() as f32 * self.owner.trainer.config.population_kill_percent) as usize;
+        species.sort_by(|a, b| a.fitness.unwrap().partial_cmp(&b.fitness.unwrap()).unwrap());
+        let remove = species
+            .iter()
+            .take(to_remove)
+            .map(|x| x.id)
+            .collect::<Vec<_>>();
+        self.owner
+            .trainer
+            .agents
+            .write()
+            .retain(|x| !remove.contains(&x.id));
+    }
+
+    /// Update a species fitness
+    pub fn update_fitness(&mut self) {
+        let species = self.this_species();
+        let len = species.len();
+        let mut sum = 0.0;
+
+        for i in species {
+            sum += i.fitness.unwrap();
+        }
+
+        let mut fitness = sum / len as f32;
+        if fitness.is_nan() {
+            fitness = 0.0;
+        }
+
+        if fitness <= self.fitness.unwrap_or(0.0) {
+            self.stagnant += 1;
+        } else {
+            self.stagnant = 0;
+        }
+
+        self.fitness = Some(fitness);
+    }
+
     /// Gets the number of agents within the specie
     /// This does rely on the `species_categorize` function being called before
     pub fn count(&self) -> usize {
-        let mut count = 0;
+        self.this_species().len()
+    }
 
-        for i in self.owner.trainer.agents.read().iter() {
-            debug_assert!(i.species.is_some());
-            count += (i.species.unwrap() == self.id) as usize;
-        }
-
-        count
+    fn this_species(&self) -> Vec<Genome> {
+        self.owner
+            .trainer
+            .agents
+            .read()
+            .iter()
+            .filter(|x| x.species.unwrap() == self.id)
+            .cloned()
+            .collect()
     }
 }

@@ -11,6 +11,7 @@ use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 
 use crate::innovation::Innovations;
+use crate::misc::sigmoid;
 use crate::species::Specie;
 use crate::{config::Config, genome::Genome};
 
@@ -46,13 +47,29 @@ impl Trainer {
     pub fn gen(&self, fit: impl Fn(usize, &Genome) -> f32) {
         let start = Instant::now();
         self.species_categorize();
-        let fitness = self.species_fitness(&self.fitness(fit));
-        let maxfit = fitness.iter().fold(f32::MIN, |x, i| x.max(*i));
 
-        self.execute(&fitness);
-        self.repopulate(&fitness);
+        // Update Fitnesses
+        self.agents
+            .write()
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, e)| e.fitness = Some(sigmoid((fit)(i, e))));
+        let maxfit = self
+            .agents
+            .read()
+            .iter()
+            .map(|x| x.fitness.unwrap())
+            .fold(f32::MIN, |x, i| x.max(i));
+
+        self.species.write().iter_mut().for_each(|x| {
+            x.update_fitness();
+            x.kill();
+        });
+        self.repopulate();
         self.mutate_population();
         self.gen.fetch_add(1, Ordering::AcqRel);
+
+        // Status message
         println!(
             "GEN: {:3} | MAXFIT: {:3.0}% | SPEC: {:2} | TIME: {}ms",
             self.gen.load(Ordering::Acquire),
@@ -136,28 +153,10 @@ impl Trainer {
 
     pub fn mutate_population(&self) {
         let mut agents = self.agents.write();
-
-        for i in agents.iter_mut() {
-            *i = i.mutate();
-        }
+        agents.iter_mut().for_each(|x| *x = x.mutate());
     }
 
-    // Removes the worst performing genomes
-    pub fn execute(&self, fitness: &[f32]) {
-        let mut agents = self.agents.write();
-        let remove_count = (agents.len() as f32 * self.config.population_kill_percent) as usize;
-        let mut agent_fitness = fitness.iter().enumerate().collect::<Vec<_>>();
-        agent_fitness.sort_by(|a, b| a.1.partial_cmp(b.1).unwrap());
-        let to_remove = agent_fitness
-            .iter()
-            .take(remove_count)
-            .map(|x| agents[x.0].id)
-            .collect::<Vec<_>>();
-
-        agents.retain(|x| !to_remove.contains(&x.id));
-    }
-
-    pub fn repopulate(&self, fitness: &[f32]) {
+    pub fn repopulate(&self) {
         let mut rng = thread_rng();
         let mut agents = self.agents.write();
         let mut new_agents = Vec::new();
@@ -191,7 +190,7 @@ impl Trainer {
             let mut tries = self.config.mutate_add_edge_tries;
             let mut new = None;
             while tries > 0 {
-                new = Some(g1.crossover(g2, (fitness[i1], fitness[i2])));
+                new = Some(g1.crossover(g2));
                 if new.as_ref().unwrap().is_recursive() {
                     tries -= 1;
                     continue;

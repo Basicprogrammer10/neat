@@ -82,7 +82,7 @@ fn fit(_: usize, g: &Genome) -> f32 {
 * Don't store nodes as real objects just counts?
 * Fix crossover wackiness
 * Spesies Struct system
-- Genocide on the spesies
+* Genocide on the spesies
 - "panic mode"
     - After not enough evolution only the top 2 spesies are allowed to repop
 */

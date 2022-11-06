@@ -28,7 +28,7 @@ pub struct Genome {
 
     pub id: usize,
     pub species: Option<usize>,
-    pub fitness: Option<f32>
+    pub fitness: Option<f32>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -296,7 +296,7 @@ impl Genome {
         this
     }
 
-    pub fn crossover(&self, other: &Self, fitness: (f32, f32)) -> Self {
+    pub fn crossover(&self, other: &Self) -> Self {
         let mut rng = thread_rng();
         let mut genes = Vec::with_capacity(self.genes.len().max(other.genes.len()));
 
@@ -313,7 +313,12 @@ impl Genome {
         }
 
         // Add nonmatching
-        let fitter_nonmatching = match fitness.0.partial_cmp(&fitness.1).unwrap() {
+        let fitter_nonmatching = match self
+            .fitness
+            .unwrap()
+            .partial_cmp(&other.fitness.unwrap())
+            .unwrap()
+        {
             Ordering::Greater => self_genes,
             Ordering::Less => other_genes,
             _ => [self_genes, other_genes]
@@ -352,6 +357,7 @@ impl Debug for Genome {
             .field("node_id", &self.node_id)
             .field("id", &self.id)
             .field("species", &self.species)
+            .field("fitness", &self.fitness)
             .finish()
     }
 }
@@ -398,7 +404,7 @@ impl NodeTester {
             out += val * i.weight;
         }
 
-        sigmoid(out)
+        out
     }
 }
 
