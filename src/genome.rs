@@ -1,11 +1,13 @@
+use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::{cell::RefCell, cmp::Ordering};
 
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
-use bitvec::prelude::Lsb0;
-use bitvec::vec::BitVec;
+use bitvec::{order::Lsb0, vec::BitVec};
+use rand::distributions::WeightedIndex;
+use rand::prelude::Distribution;
 use rand::{
     seq::{IteratorRandom, SliceRandom},
     thread_rng, Rng,
@@ -21,7 +23,7 @@ pub struct Genome {
     trainer: Arc<Trainer>,
 
     pub genes: Vec<Gene>,
-    nodes: usize,
+    node_id: usize,
 
     pub id: usize,
     pub species: Option<usize>,
@@ -68,7 +70,7 @@ impl Genome {
             id: trainer.new_innovation(),
             species: None,
             genes,
-            nodes: trainer.inputs + trainer.outputs,
+            node_id: trainer.inputs + trainer.outputs,
             trainer,
         }
     }
@@ -194,7 +196,7 @@ impl Genome {
 
     pub fn is_recursive(&self) -> bool {
         for i in 0..self.trainer.inputs {
-            let mut seen_nodes = BitVec::<usize, Lsb0>::repeat(false, self.nodes);
+            let mut seen_nodes = BitVec::<usize, Lsb0>::repeat(false, self.node_id);
             seen_nodes.set(i, true);
 
             if is_recursive_checker(seen_nodes.clone(), &self.genes, i) {
@@ -257,34 +259,38 @@ impl Genome {
         }
 
         // Add Node
-        // ==
-        debug_assert!(!this.genes.is_empty());
         if rng.gen_bool(self.trainer.config.mutate_add_node.into()) {
-            let gene = this
-                .genes
-                .iter_mut()
-                .filter(|x| x.enabled)
-                .choose(&mut rng)
-                .unwrap();
+            let mut gene = if this.genes.len() < 15 {
+                let weights =
+                    WeightedIndex::new((0..this.genes.len()).rev().map(|x| x + 1)).unwrap();
+
+                &mut this.genes[weights.sample(&mut rng)]
+            } else {
+                this.genes
+                    .iter_mut()
+                    .filter(|x| x.enabled)
+                    .choose(&mut rng)
+                    .unwrap()
+            };
+
             let old_node_from = gene.node_in;
             let old_node_to = gene.node_out;
 
             gene.enabled = false;
             this.genes.push(Gene {
                 node_in: old_node_from,
-                node_out: this.nodes,
+                node_out: this.node_id,
                 weight: 1.0,
                 enabled: true,
                 innovation: self.trainer.new_innovation(),
             });
             this.genes.push(Gene::random(
                 self.trainer.new_innovation(),
-                this.nodes,
+                this.node_id,
                 old_node_to,
             ));
-            this.nodes += 1;
+            this.node_id += 1;
         }
-        // ==
 
         this
     }
@@ -321,7 +327,7 @@ impl Genome {
             id: self.trainer.new_innovation(),
             species: None,
             genes,
-            nodes: self.nodes.max(other.nodes),
+            node_id: self.node_id.max(other.node_id),
         }
     }
 

@@ -19,7 +19,7 @@ pub struct Trainer {
     pub agents: RwLock<Vec<Genome>>,
     /// Species ID, Case 0 Genome
     pub species: RwLock<Vec<(usize, Genome)>>,
-    innovation: AtomicUsize,
+    pub innovation: AtomicUsize,
 
     // == SIMULATION ==
     pub config: Config,
@@ -86,6 +86,7 @@ impl Trainer {
         species.retain(|x| used_species.contains(&x.0));
     }
 
+    // TODO: Hashmap?
     pub fn fitness(&self, fitness: impl Fn(usize, &Genome) -> f32) -> Vec<f32> {
         let agents = self.agents.borrow().read();
         agents
@@ -150,9 +151,7 @@ impl Trainer {
                 continue;
             }
 
-            // let new = g1.crossover(g2, (fitness[i1], fitness[i2]));
-            let mut new = g1.clone();
-            new.id = self.new_innovation();
+            let new = g1.crossover(g2, (fitness[i1], fitness[i2]));
             if new.is_recursive() {
                 continue;
             }

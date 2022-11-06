@@ -12,36 +12,6 @@ fn main() {
     // Create a new trainer with 2 inputs and 1 output
     // Then populate it
     let trainer = Arc::new(Trainer::new(3, 1)).populate();
-
-  // let g1 = Genome::new(trainer);
-  // dbg!(g1.is_recursive());
-  //   return;
-
-  
-    // let genome = Genome::new(trainer);
-    // println!("{}", genome.debug());
-    // println!("{:?}", genome.simulate(&[1.0, 1.0]));
-
-    // return;
-
-    // let mut g1 = Genome::new(trainer.clone());
-    // let mut g2 = Genome::new(trainer.clone());
-
-    // let mut mutations = Vec::new();
-    // for _ in 0..30 {
-    //     g1 = g1.mutate(&mut mutations);
-    //     g2 = g2.mutate(&mut mutations);
-    // }
-
-    // let of = g1.crossover(&g2, (1.0, 0.0));
-    // println!(
-    //     "\nGENOME 1:\n{}\nGENOME 2:\n{}\nOFFSPRING:\n{}",
-    //     g1.debug(),
-    //     g2.debug(),
-    //     of.debug()
-    // );
-    // return;
-
     let mut best = None;
 
     // Evolve for 200 genarations
@@ -59,6 +29,8 @@ fn main() {
                 .0]
                 .clone(),
         );
+        // println!("{}", best.as_ref().unwrap().debug());
+
         println!("[*] GEN: {gen} | MAXFIT: {maxfit:.2}");
 
         trainer.execute(&fitness);
@@ -77,7 +49,7 @@ fn fit(_: usize, g: &Genome) -> f32 {
         let inp = [1.0, i[0] as usize as f32, i[1] as usize as f32];
         let real = (i[0] ^ i[1]) as usize as f32;
         let got = g.simulate(&inp)[0];
-        sum += (real - got).abs();
+        sum += (real - got).powf(2.);
     }
 
     (4.0 - sum) / 4.0
@@ -107,11 +79,11 @@ fn fit(_: usize, g: &Genome) -> f32 {
 
 * Selection
 * Debug weird freezes when doing tens of thousands of mutations
-- While less than 15 genes bias add node operation to older genes
+* While less than 15 genes bias add node operation to older genes
 * When repopulating, remove the worse preforming genomes first. Then crossover.
 * Look into neuron bias
 - Past mutations
 * Make system work with inout node counts not vecs of them
 * Don't store nodes as real objects just counts?
-- Fix crossover wackiness
+* Fix crossover wackiness
 */
