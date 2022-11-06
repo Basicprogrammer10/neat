@@ -21,13 +21,14 @@ use crate::{
 
 #[derive(Clone)]
 pub struct Genome {
-    trainer: Arc<Trainer>,
+    pub(crate) trainer: Arc<Trainer>,
 
     pub genes: Vec<Gene>,
     node_id: usize,
 
     pub id: usize,
     pub species: Option<usize>,
+    pub fitness: Option<f32>
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -66,6 +67,7 @@ impl Genome {
         Self {
             id: trainer.innovator.new_genome(),
             species: None,
+            fitness: None,
             genes,
             node_id: trainer.inputs + trainer.outputs,
             trainer,
@@ -325,6 +327,7 @@ impl Genome {
             trainer: self.trainer.clone(),
             id: self.trainer.innovator.new_genome(),
             species: None,
+            fitness: None,
             genes,
             node_id: self.node_id.max(other.node_id),
         }

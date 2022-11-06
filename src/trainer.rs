@@ -11,6 +11,7 @@ use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 
 use crate::innovation::Innovations;
+use crate::species::Specie;
 use crate::{config::Config, genome::Genome};
 
 pub struct Trainer {
@@ -21,7 +22,7 @@ pub struct Trainer {
     // == GENOME ==
     pub agents: RwLock<Vec<Genome>>,
     /// Species ID, Case 0 Genome
-    pub species: RwLock<Vec<(usize, Genome)>>,
+    pub species: RwLock<Vec<Specie>>,
     pub innovator: Innovations,
 
     // == SIMULATION ==
@@ -53,8 +54,9 @@ impl Trainer {
         self.mutate_population();
         self.gen.fetch_add(1, Ordering::AcqRel);
         println!(
-            "GEN: {:3} | MAXFIT: {maxfit:.2} | SPEC: {:2} | TIME: {}ms",
+            "GEN: {:3} | MAXFIT: {:3.0}% | SPEC: {:2} | TIME: {}ms",
             self.gen.load(Ordering::Acquire),
+            maxfit * 100.,
             self.species.read().len(),
             start.elapsed().as_millis()
         );
@@ -86,23 +88,23 @@ impl Trainer {
 
             // Compare it to every current species
             for x in species.iter() {
-                let distance = x.1.distance(genome);
+                let distance = x.owner.distance(genome);
                 if distance < self.config.compatibility_threshold {
-                    agents[agent_index].species = Some(x.0);
-                    used_species.push(x.0);
+                    agents[agent_index].species = Some(x.id);
+                    used_species.push(x.id);
                     continue 'l;
                 }
             }
 
             // Create a new species
-            let new_index = self.innovator.new_specie();
-            species.push((new_index, genome.clone()));
+            let (new_index, specie) = Specie::new(genome.clone());
+            species.push(specie);
             agents[agent_index].species = Some(new_index);
             used_species.push(new_index);
         }
 
         // Prune unused species
-        species.retain(|x| used_species.contains(&x.0));
+        species.retain(|x| used_species.contains(&x.id));
 
         debug_assert!(agents.iter().all(|x| x.species.is_some()));
     }

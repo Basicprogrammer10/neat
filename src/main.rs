@@ -4,6 +4,7 @@ mod config;
 mod genome;
 mod innovation;
 mod misc;
+mod species;
 mod trainer;
 use genome::Genome;
 
@@ -76,8 +77,12 @@ fn fit(_: usize, g: &Genome) -> f32 {
 * While less than 15 genes bias add node operation to older genes
 * When repopulating, remove the worse preforming genomes first. Then crossover.
 * Look into neuron bias
-- Past mutations
+* Past mutations
 * Make system work with inout node counts not vecs of them
 * Don't store nodes as real objects just counts?
 * Fix crossover wackiness
+* Spesies Struct system
+- Genocide on the spesies
+- "panic mode"
+    - After not enough evolution only the top 2 spesies are allowed to repop
 */
