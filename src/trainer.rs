@@ -4,10 +4,13 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
+use std::time::Instant;
 
 use parking_lot::RwLock;
+use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 
+use crate::innovation::Innovations;
 use crate::{config::Config, genome::Genome};
 
 pub struct Trainer {
@@ -19,10 +22,11 @@ pub struct Trainer {
     pub agents: RwLock<Vec<Genome>>,
     /// Species ID, Case 0 Genome
     pub species: RwLock<Vec<(usize, Genome)>>,
-    pub innovation: AtomicUsize,
+    pub innovator: Innovations,
 
     // == SIMULATION ==
     pub config: Config,
+    pub gen: AtomicUsize,
 }
 
 impl Trainer {
@@ -32,13 +36,28 @@ impl Trainer {
             outputs,
             agents: RwLock::new(Vec::new()),
             species: RwLock::new(Vec::new()),
-            innovation: AtomicUsize::new(0),
+            innovator: Innovations::new(),
             config: Config::default(),
+            gen: AtomicUsize::new(0),
         }
     }
 
-    pub(crate) fn new_innovation(&self) -> usize {
-        self.innovation.fetch_add(1, Ordering::AcqRel)
+    pub fn gen(&self, fit: impl Fn(usize, &Genome) -> f32) {
+        let start = Instant::now();
+        self.species_categorize();
+        let fitness = self.species_fitness(&self.fitness(fit));
+        let maxfit = fitness.iter().fold(f32::MIN, |x, i| x.max(*i));
+
+        self.execute(&fitness);
+        self.repopulate(&fitness);
+        self.mutate_population();
+        self.gen.fetch_add(1, Ordering::AcqRel);
+        println!(
+            "GEN: {:3} | MAXFIT: {maxfit:.2} | SPEC: {:2} | TIME: {}ms",
+            self.gen.load(Ordering::Acquire),
+            self.species.read().len(),
+            start.elapsed().as_millis()
+        );
     }
 
     /// Create the innitial population
@@ -57,33 +76,35 @@ impl Trainer {
         let mut rng = thread_rng();
         let mut agents = self.agents.borrow().write();
         let mut species = self.species.borrow().write();
-        let mut working = agents.clone();
+        let working = agents.clone();
+        let mut working = working.iter().enumerate().collect::<Vec<_>>();
         let mut used_species = Vec::new();
 
         'l: while !working.is_empty() {
             // Get and remove random genome
-            let genome_index = rng.gen_range(0..working.len());
-            let genome = working.remove(genome_index);
+            let (agent_index, genome) = working.remove(rng.gen_range(0..working.len()));
 
             // Compare it to every current species
             for x in species.iter() {
-                let distance = x.1.distance(&genome);
+                let distance = x.1.distance(genome);
                 if distance < self.config.compatibility_threshold {
-                    agents[genome_index].species = Some(x.0);
+                    agents[agent_index].species = Some(x.0);
                     used_species.push(x.0);
                     continue 'l;
                 }
             }
 
             // Create a new species
-            let new_index = species.last().map(|x| x.0 + 1).unwrap_or(0);
+            let new_index = self.innovator.new_specie();
             species.push((new_index, genome.clone()));
-            agents[genome_index].species = Some(new_index);
+            agents[agent_index].species = Some(new_index);
             used_species.push(new_index);
         }
 
         // Prune unused species
         species.retain(|x| used_species.contains(&x.0));
+
+        debug_assert!(agents.iter().all(|x| x.species.is_some()));
     }
 
     // TODO: Hashmap?
@@ -113,10 +134,9 @@ impl Trainer {
 
     pub fn mutate_population(&self) {
         let mut agents = self.agents.write();
-        let mut mutations = Vec::new();
 
         for i in agents.iter_mut() {
-            *i = i.mutate(&mut mutations);
+            *i = i.mutate();
         }
     }
 
@@ -142,21 +162,46 @@ impl Trainer {
         debug_assert!(agents.len() > 1);
 
         while new_agents.len() < self.config.population_size {
+            // Find random genome
             let i1 = rng.gen_range(0..agents.len());
-            let i2 = rng.gen_range(0..agents.len());
             let g1 = &agents[i1];
-            let g2 = &agents[i2];
+            debug_assert!(g1.species.is_some());
+
+            // Find another one within its species
+            let matching_agents = agents
+                .iter()
+                .enumerate()
+                .filter(|x| x.1.species == g1.species)
+                .collect::<Vec<_>>();
+            let (mut i2, mut g2) = matching_agents.choose(&mut rng).unwrap();
+
+            if matching_agents.len() <= 1 {
+                let index_agents = agents.iter().enumerate().collect::<Vec<_>>();
+                let rand = index_agents.choose(&mut rng).unwrap();
+                i2 = rand.0;
+                g2 = rand.1;
+            }
 
             if i1 == i2 {
                 continue;
             }
 
-            let new = g1.crossover(g2, (fitness[i1], fitness[i2]));
-            if new.is_recursive() {
-                continue;
+            let mut tries = self.config.mutate_add_edge_tries;
+            let mut new = None;
+            while tries > 0 {
+                new = Some(g1.crossover(g2, (fitness[i1], fitness[i2])));
+                if new.as_ref().unwrap().is_recursive() {
+                    tries -= 1;
+                    continue;
+                }
+
+                break;
             }
 
-            new_agents.push(new);
+            new_agents.push(match new {
+                Some(i) => i,
+                None => continue,
+            });
         }
 
         mem::swap(&mut *agents, &mut new_agents);

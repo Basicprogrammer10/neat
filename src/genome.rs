@@ -13,6 +13,7 @@ use rand::{
     thread_rng, Rng,
 };
 
+use crate::innovation::EdgeCount;
 use crate::{
     misc::{sigmoid, SignString},
     trainer::Trainer,
@@ -35,7 +36,7 @@ pub struct Gene {
     pub node_out: usize,
     pub weight: f32,
     pub enabled: bool,
-    pub innovation: usize,
+    pub innovation: EdgeCount,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,16 +59,12 @@ impl Genome {
         for i in 0..trainer.inputs {
             for o in 0..trainer.outputs {
                 // Make new gene
-                genes.push(Gene::random(
-                    trainer.new_innovation(),
-                    i,
-                    trainer.inputs + o,
-                ));
+                genes.push(Gene::random(trainer.clone(), i, trainer.inputs + o));
             }
         }
 
         Self {
-            id: trainer.new_innovation(),
+            id: trainer.innovator.new_genome(),
             species: None,
             genes,
             node_id: trainer.inputs + trainer.outputs,
@@ -163,7 +160,7 @@ impl Genome {
     pub fn debug(&self) -> String {
         let mut out = Vec::new();
 
-        for i in self.genes.iter().filter(|x| x.enabled) {
+        for i in self.genes.iter() {
             let node_in = self.classify_node(i.node_in);
             let node_out = self.classify_node(i.node_out);
 
@@ -207,7 +204,7 @@ impl Genome {
         false
     }
 
-    pub fn mutate(&self, _past_mutations: &mut [(usize, (usize, usize))]) -> Self {
+    pub fn mutate(&self) -> Self {
         let mut rng = thread_rng();
         let mut this = self.clone();
 
@@ -252,8 +249,7 @@ impl Genome {
                     continue;
                 }
 
-                this.genes
-                    .push(Gene::random(self.trainer.new_innovation(), a, b));
+                this.genes.push(Gene::random(self.trainer.clone(), a, b));
                 break;
             }
         }
@@ -282,10 +278,13 @@ impl Genome {
                 node_out: this.node_id,
                 weight: 1.0,
                 enabled: true,
-                innovation: self.trainer.new_innovation(),
+                innovation: self
+                    .trainer
+                    .innovator
+                    .new_edge((old_node_from, this.node_id)),
             });
             this.genes.push(Gene::random(
-                self.trainer.new_innovation(),
+                self.trainer.clone(),
                 this.node_id,
                 old_node_to,
             ));
@@ -324,7 +323,7 @@ impl Genome {
 
         Genome {
             trainer: self.trainer.clone(),
-            id: self.trainer.new_innovation(),
+            id: self.trainer.innovator.new_genome(),
             species: None,
             genes,
             node_id: self.node_id.max(other.node_id),
@@ -340,6 +339,17 @@ impl Genome {
         }
 
         out
+    }
+}
+
+impl Debug for Genome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Genome")
+            .field("genes", &self.genes)
+            .field("node_id", &self.node_id)
+            .field("id", &self.id)
+            .field("species", &self.species)
+            .finish()
     }
 }
 
@@ -390,13 +400,13 @@ impl NodeTester {
 }
 
 impl Gene {
-    fn random(innovation: usize, from: usize, to: usize) -> Self {
+    fn random(trainer: Arc<Trainer>, from: usize, to: usize) -> Self {
         Self {
             node_in: from,
             node_out: to,
             weight: thread_rng().gen_range(-1f32..=1f32),
             enabled: true,
-            innovation,
+            innovation: trainer.innovator.new_edge((from, to)),
         }
     }
 

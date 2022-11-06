@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 mod config;
 mod genome;
+mod innovation;
 mod misc;
 mod trainer;
 use genome::Genome;
@@ -15,28 +16,21 @@ fn main() {
     let mut best = None;
 
     // Evolve for 200 genarations
-    for gen in 1..=200 {
-        // Catagorize the species
-        trainer.species_categorize();
-        let fitness = trainer.species_fitness(&trainer.fitness(fit));
-        let maxfit = fitness.iter().fold(f32::MIN, |x, i| x.max(*i));
-        best = Some(
-            trainer.agents.read()[fitness
-                .iter()
-                .enumerate()
-                .find(|x| *x.1 == maxfit)
-                .unwrap()
-                .0]
-                .clone(),
-        );
-        // println!("{}", best.as_ref().unwrap().debug());
-
-        println!("[*] GEN: {gen} | MAXFIT: {maxfit:.2}");
-
-        trainer.execute(&fitness);
-        trainer.repopulate(&fitness);
-        trainer.mutate_population();
+    for _ in 1..=200 {
+        trainer.gen(fit);
     }
+
+    let fitness = trainer.species_fitness(&trainer.fitness(fit));
+    let maxfit = fitness.iter().fold(f32::MIN, |x, i| x.max(*i));
+    best = Some(
+        trainer.agents.read()[fitness
+            .iter()
+            .enumerate()
+            .find(|x| *x.1 == maxfit)
+            .unwrap()
+            .0]
+            .clone(),
+    );
 
     println!("{}", best.unwrap().debug());
 }
@@ -49,7 +43,7 @@ fn fit(_: usize, g: &Genome) -> f32 {
         let inp = [1.0, i[0] as usize as f32, i[1] as usize as f32];
         let real = (i[0] ^ i[1]) as usize as f32;
         let got = g.simulate(&inp)[0];
-        sum += (real - got).powf(2.);
+        sum += (real - got).abs();
     }
 
     (4.0 - sum) / 4.0

@@ -31,6 +31,7 @@ pub struct Config {
 
     // == CROSSOVER CHANCES ==
     pub crossover_keep_disabled: f32,
+    pub crossover_trys: usize,
 }
 
 // Default values stolen from the NEAT paper
@@ -51,6 +52,7 @@ impl Default for Config {
             mutate_add_edge_tries: 20,
             mutate_disable_edge: 0.0,
             crossover_keep_disabled: 0.1, // idk
+            crossover_trys: 1,
         }
     }
 }
